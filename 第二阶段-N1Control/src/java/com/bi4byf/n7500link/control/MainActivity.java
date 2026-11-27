@@ -114,7 +114,7 @@ public class MainActivity extends Activity implements BluetoothLink.Listener, Ga
         prepareLogging();
         refreshPairedDevices();
         updateConnectionUi(false);
-        appendLog("[系统] N1Control 启动，版本 0.2.0；仅开放音量和信道扫描等低风险写入，不包含 PTT、音频或网络功能。");
+        appendLog("[系统] N1Control 启动，版本 0.2.1；仅开放音量和信道扫描等低风险写入，不包含 PTT、音频或网络功能。");
         if (adapter == null) {
             appendLog("[系统] 本机没有可用的蓝牙适配器。");
         } else if (!adapter.isEnabled()) {

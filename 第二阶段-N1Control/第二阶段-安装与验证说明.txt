@@ -1,5 +1,5 @@
 N1Control N7500 第二阶段安装与实机验证说明
-版本 0.2.0 / 包名 com.bi4byf.n7500link.control / 作者 BI4BYF
+版本 0.2.1 / 包名 com.bi4byf.n7500link.control / 作者 BI4BYF
 
 一、本版本能做什么
 1. 读取 N7500 设备信息、设置、状态、音量和信道记录。
@@ -21,13 +21,13 @@ N1Control N7500 第二阶段安装与实机验证说明
 
 三、安装包和校验
 APK：
-C:\Users\Zhang minjun\Desktop\N7500\第二阶段-N1Control\dist\N1Control-N7500-v0.2.0-debug.apk
+C:\Users\Zhang minjun\Desktop\N7500\第二阶段-N1Control\dist\N1Control-N7500-v0.2.1-debug.apk
 
 SHA-256：
-59C43A792DCFC758E02410DEC6AA900E12EFC86A2052316C1A5960C35274D048
+5DC98ADB7DA2EDC570CEF123D1E8F576CB4D486F16D0CA6DC9F4D80D6525563D
 
 核对命令：
-Get-FileHash -Algorithm SHA256 -LiteralPath "C:\Users\Zhang minjun\Desktop\N7500\第二阶段-N1Control\dist\N1Control-N7500-v0.2.0-debug.apk"
+Get-FileHash -Algorithm SHA256 -LiteralPath "C:\Users\Zhang minjun\Desktop\N7500\第二阶段-N1Control\dist\N1Control-N7500-v0.2.1-debug.apk"
 
 哈希必须与 SHA256SUMS.txt 一致。不一致时不要安装。
 
@@ -39,7 +39,7 @@ C:\adb-n1\platform-tools\adb.exe devices -l
 C:\adb-n1\platform-tools\adb.exe connect <N1局域网IP>:5555
 
 3. 安装新版：
-C:\adb-n1\platform-tools\adb.exe install -r "C:\Users\Zhang minjun\Desktop\N7500\第二阶段-N1Control\dist\N1Control-N7500-v0.2.0-debug.apk"
+C:\adb-n1\platform-tools\adb.exe install -r "C:\Users\Zhang minjun\Desktop\N7500\第二阶段-N1Control\dist\N1Control-N7500-v0.2.1-debug.apk"
 
 4. 启动：
 C:\adb-n1\platform-tools\adb.exe shell am start -n com.bi4byf.n7500link.control/.MainActivity
@@ -111,7 +111,8 @@ C:\adb-n1\platform-tools\adb.exe pull /sdcard/Android/data/com.bi4byf.n7500link.
 5. 不要用本版本尝试 PTT、音频或远程发射。
 
 九、当前验收状态
-当前状态：离线验证通过，实机验收待执行。
+当前状态：横屏界面与只读链路实机检查通过；低风险写入稳定性待验收。
 离线结果：37 项协议/状态自测通过；APK v2/v3 签名和对齐通过；权限检查通过。
-实机结果：尚未执行，因为当前 ADB 没有在线 N1 设备。
-只有在真实 N7500 上完成上述五项试验并确认回读、回滚和日志后，第二阶段才算实机验收通过。
+实机结果：0.2.1 已安装到 N1；横屏显示完整；N7500 通过 SDP 自动信道连接成功；设备信息、设置、状态和通知读取成功。
+尚未结果：音量写入、扫描切换、A/B 切换和 50 次稳定性自检尚未执行，不能把本阶段描述为完整写入验收通过。
+只有在真实 N7500 上完成上述五项试验并确认回读、回滚和日志后，第二阶段才算完整实机验收通过。

@@ -207,3 +207,4 @@ final class GaiaCodec {
     long getRxFrames() { return rxFrames; }
     long getDiscardedBytes() { return discardedBytes; }
 }
+

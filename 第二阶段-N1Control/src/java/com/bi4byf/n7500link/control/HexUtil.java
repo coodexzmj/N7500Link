@@ -54,3 +54,4 @@ final class HexUtil {
         return String.format(Locale.US, "0x%04X", value & 0xFFFF);
     }
 }
+
