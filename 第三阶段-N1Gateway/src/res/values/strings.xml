@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">N1Gateway N7500 只读网关</string>
+    <string name="notification_channel">N1Gateway 常驻服务</string>
+    <string name="notification_title">N1Gateway 只读网关运行中</string>
+    <string name="notification_text">点按打开本地网关控制页</string>
+</resources>

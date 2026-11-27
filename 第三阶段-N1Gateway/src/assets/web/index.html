@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>N1Gateway · N7500 只读监控</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body class="app-page">
+  <header class="wx-topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">N</span>
+      <span class="brand-title">N7500 只读监控</span>
+      <span class="readonly-badge">只读</span>
+    </div>
+    <div class="topbar-status" aria-live="polite">
+      <span id="connection-dot" class="dot unknown"></span>
+      <span id="connection-text">正在连接</span>
+      <button id="logout" class="topbar-button" type="button">退出登录</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="sidebar" aria-label="监控导航">
+      <div class="account-card">
+        <div class="avatar" aria-hidden="true">N75</div>
+        <div class="account-copy">
+          <strong id="side-device">N7500</strong>
+          <span id="side-summary">等待网关快照</span>
+        </div>
+        <span id="side-state-dot" class="dot unknown" aria-hidden="true"></span>
+      </div>
+
+      <nav class="nav-list">
+        <button class="nav-item active" type="button" data-panel="overview" aria-controls="panel-overview" aria-selected="true">
+          <span class="nav-icon" aria-hidden="true">◎</span><span>总览</span>
+        </button>
+        <button class="nav-item" type="button" data-panel="device" aria-controls="panel-device" aria-selected="false">
+          <span class="nav-icon" aria-hidden="true">▣</span><span>设备信息</span>
+        </button>
+        <button class="nav-item" type="button" data-panel="channel" aria-controls="panel-channel" aria-selected="false">
+          <span class="nav-icon" aria-hidden="true">#</span><span>当前信道</span>
+        </button>
+        <button class="nav-item" type="button" data-panel="gateway" aria-controls="panel-gateway" aria-selected="false">
+          <span class="nav-icon" aria-hidden="true">⇄</span><span>网关状态</span>
+        </button>
+        <button class="nav-item" type="button" data-panel="diagnostics" aria-controls="panel-diagnostics" aria-selected="false">
+          <span class="nav-icon" aria-hidden="true">⌁</span><span>诊断</span>
+        </button>
+        <button class="nav-item" type="button" data-panel="about" aria-controls="panel-about" aria-selected="false">
+          <span class="nav-icon" aria-hidden="true">i</span><span>关于</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <span>作者 BI4BYF</span>
+        <span>G1 · 本地优先</span>
+      </div>
+    </aside>
+
+    <section class="content" aria-live="polite">
+      <article id="panel-overview" class="panel" data-panel="overview">
+        <header class="panel-heading">
+          <div>
+            <p class="eyebrow">N7500 WORKSPACE</p>
+            <h1>电台工作台</h1>
+            <p class="subtitle">只展示最近一次成功读取的状态。网页不持有蓝牙连接，也不能发射或修改电台。</p>
+          </div>
+          <span id="freshness" class="status-pill">等待快照</span>
+        </header>
+
+        <div class="channel-hero">
+          <div class="channel-main">
+            <span class="hero-label">当前信道</span>
+            <strong id="overview-channel">—</strong>
+            <span id="overview-frequency" class="hero-frequency">—</span>
+          </div>
+          <div class="hero-side">
+            <span class="hero-label">接收状态</span>
+            <strong id="overview-receiving">—</strong>
+            <span id="revision" class="revision"></span>
+          </div>
+        </div>
+
+        <div class="summary-grid">
+          <div class="summary-item">
+            <span>设备</span>
+            <strong id="overview-device">—</strong>
+          </div>
+          <div class="summary-item">
+            <span>网关</span>
+            <strong id="overview-gateway-state">—</strong>
+          </div>
+          <div class="summary-item">
+            <span>最近更新</span>
+            <strong id="overview-updated">—</strong>
+          </div>
+          <div class="summary-item">
+            <span>快照</span>
+            <strong id="overview-freshness">—</strong>
+          </div>
+        </div>
+
+        <div class="notice-card">
+          <span class="notice-icon" aria-hidden="true">✓</span>
+          <div>
+            <strong>只读连接正常</strong>
+            <p>默认仅监听明确地址，不开放 PTT、音频、信道写入或设置接口。</p>
+          </div>
+        </div>
+      </article>
+
+      <article id="panel-device" class="panel" data-panel="device" hidden>
+        <header class="panel-heading">
+          <div><p class="eyebrow">DEVICE</p><h1>设备信息</h1><p class="subtitle">由网关通过蓝牙只读读取，展示电台身份与能力。</p></div>
+        </header>
+        <div class="list-card">
+          <dl>
+            <dt>产品</dt><dd id="product-id">—</dd>
+            <dt>固件 / 软件</dt><dd id="software-version">—</dd>
+            <dt>信道 / 区域</dt><dd id="channel-count">—</dd>
+            <dt>频段</dt><dd id="band-count">—</dd>
+            <dt>设备名称</dt><dd id="device-label">—</dd>
+          </dl>
+        </div>
+        <h2 class="group-title">设备能力</h2>
+        <div class="list-card compact">
+          <dl>
+            <dt>FM 接收</dt><dd id="fm-receive">—</dd>
+            <dt>DMR</dt><dd id="dmr">—</dd>
+            <dt>VFO</dt><dd id="vfo">—</dd>
+          </dl>
+        </div>
+      </article>
+
+      <article id="panel-channel" class="panel" data-panel="channel" hidden>
+        <header class="panel-heading">
+          <div><p class="eyebrow">CHANNEL</p><h1>当前信道</h1><p class="subtitle">当前选中信道、收发频率与实时接收状态。</p></div>
+        </header>
+        <div class="list-card">
+          <dl>
+            <dt>名称</dt><dd id="channel-name">—</dd>
+            <dt>接收频率</dt><dd id="rx-mhz">—</dd>
+            <dt>发射频率</dt><dd id="tx-mhz">—</dd>
+            <dt>当前信道</dt><dd id="current-channel">—</dd>
+            <dt>当前区域</dt><dd id="current-zone">—</dd>
+          </dl>
+        </div>
+        <h2 class="group-title">实时状态</h2>
+        <div class="list-card compact">
+          <dl>
+            <dt>接收</dt><dd id="receiving">—</dd>
+            <dt>静噪开启</dt><dd id="squelch-open">—</dd>
+            <dt>扫描</dt><dd id="scanning">—</dd>
+            <dt>RSSI</dt><dd id="rssi">—</dd>
+            <dt>音量</dt><dd id="volume">—</dd>
+            <dt>静噪等级</dt><dd id="squelch">—</dd>
+            <dt>双守模式</dt><dd id="dual-mode">—</dd>
+          </dl>
+        </div>
+      </article>
+
+      <article id="panel-gateway" class="panel" data-panel="gateway" hidden>
+        <header class="panel-heading">
+          <div><p class="eyebrow">GATEWAY</p><h1>网关状态</h1><p class="subtitle">N1 前台服务、蓝牙连接和最后快照的汇总。</p></div>
+        </header>
+        <div class="list-card">
+          <dl>
+            <dt>网关状态</dt><dd id="gateway-state">—</dd>
+            <dt>连接状态</dt><dd id="connection-state">—</dd>
+            <dt>设备</dt><dd id="gateway-device-label">—</dd>
+            <dt>最近更新</dt><dd id="updated-at">—</dd>
+            <dt>数据来源</dt><dd id="source">—</dd>
+            <dt>最后错误</dt><dd id="last-error">—</dd>
+            <dt>实例</dt><dd id="instance-id">—</dd>
+          </dl>
+        </div>
+        <div class="tip-card">
+          <strong>页面与蓝牙隔离</strong>
+          <p>蓝牙串口只由 N1 前台服务持有。浏览器读取本地缓存，不直接连接电台。</p>
+        </div>
+      </article>
+
+      <article id="panel-diagnostics" class="panel" data-panel="diagnostics" hidden>
+        <header class="panel-heading">
+          <div><p class="eyebrow">DIAGNOSTICS</p><h1>连接诊断</h1><p class="subtitle">用于确认快照时效与网关链路，不包含控制通道。</p></div>
+        </header>
+        <div class="diagnostic-banner">
+          <span class="dot" id="diagnostic-dot"></span>
+          <div><strong id="diagnostic-title">等待诊断数据</strong><p id="diagnostic-detail">正在读取网关快照。</p></div>
+        </div>
+        <div class="list-card">
+          <dl>
+            <dt>快照时效</dt><dd id="diagnostic-freshness">—</dd>
+            <dt>修订号</dt><dd id="diagnostic-revision">—</dd>
+            <dt>最近更新</dt><dd id="diagnostic-updated">—</dd>
+            <dt>数据来源</dt><dd id="diagnostic-source">—</dd>
+            <dt>网关错误</dt><dd id="diagnostic-error">—</dd>
+            <dt>接口版本</dt><dd>API v1 · schema 1</dd>
+            <dt>访问边界</dt><dd>GET 快照 / SSE 状态推送</dd>
+          </dl>
+        </div>
+      </article>
+
+      <article id="panel-about" class="panel" data-panel="about" hidden>
+        <header class="panel-heading">
+          <div><p class="eyebrow">ABOUT</p><h1>关于</h1><p class="subtitle">面向 N1 + WENNUO N7500 的本地只读远程监控。</p></div>
+        </header>
+        <div class="about-card">
+          <div class="about-logo" aria-hidden="true">N</div>
+          <strong>N1Gateway</strong>
+          <span>版本 0.3.4 · G1 只读边界</span>
+          <p>修改作者：BI4BYF<br>项目：N7500Link</p>
+        </div>
+        <div class="list-card compact">
+          <dl>
+            <dt>运行设备</dt><dd>斐讯 N1 / Android 7.1.2</dd>
+            <dt>电台</dt><dd>WENNUO N7500</dd>
+            <dt>网络</dt><dd>家庭 Wi-Fi / Tailscale</dd>
+            <dt>页面依赖</dt><dd>全部本地资源，无 CDN</dd>
+          </dl>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <div id="notice" class="notice" hidden></div>
+  <script src="/assets/app.js"></script>
+</body>
+</html>

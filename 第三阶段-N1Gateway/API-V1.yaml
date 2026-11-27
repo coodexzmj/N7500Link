@@ -100,7 +100,7 @@ paths:
             text/html:
               schema:
                 type: string
-        "302":
+        "303":
           description: 无有效会话时跳转到 /login。
         "401":
           $ref: "#/components/responses/AuthRequired"
@@ -222,7 +222,7 @@ components:
           example: n7500link-gateway
         version:
           type: string
-          example: 0.3.0
+          example: 0.3.4
     Error:
       type: object
       additionalProperties: false
