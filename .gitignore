@@ -1,0 +1,26 @@
+# Build intermediates
+build/
+build-*/
+*.class
+*.dex
+*.jar
+
+# Signing secrets and local keystores
+keystore/
+*.jks
+*.keystore
+*.p12
+*.pfx
+
+# Local measurement logs
+N1Probe-logs/
+实测日志/
+*.log
+
+# Generated signature sidecar
+*.idsig
+
+# IDE and local SDK paths
+.idea/
+*.iml
+local.properties
