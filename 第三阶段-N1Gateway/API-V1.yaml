@@ -1,0 +1,496 @@
+openapi: 3.0.3
+info:
+  title: N1Gateway Read-Only API
+  version: "1.0.0"
+  description: |
+    N1Gateway G1 只读监控接口。
+    本合同不包含 PTT、音频、音量写入、扫描写入、信道写入、固件或工厂操作。
+    访问令牌不得通过 URL 查询串传递。
+servers:
+  - url: http://127.0.0.1:8710
+    description: 默认回环地址；局域网或 Tailscale 地址由 N1 本地手动选择。
+tags:
+  - name: health
+  - name: auth
+  - name: monitor
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      summary: 最小健康检查
+      security: []
+      responses:
+        "200":
+          description: 进程正在运行；电台离线也会返回 200。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /login:
+    get:
+      tags: [auth]
+      summary: 内置访问令牌登录页
+      security: []
+      responses:
+        "200":
+          description: 登录页面
+          content:
+            text/html:
+              schema:
+                type: string
+  /api/v1/session:
+    post:
+      tags: [auth]
+      summary: 使用访问令牌建立 HttpOnly 会话
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: N1 本地生成的访问令牌。
+                  minLength: 20
+                  maxLength: 256
+      responses:
+        "303":
+          description: 登录成功，设置 Cookie 并跳转到首页。
+          headers:
+            Set-Cookie:
+              description: HttpOnly; SameSite=Strict; Path=/; Max-Age=43200
+              schema:
+                type: string
+          content:
+            text/plain:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/AuthFailed"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+    delete:
+      tags: [auth]
+      summary: 退出当前浏览器会话
+      security:
+        - cookieAuth: []
+      responses:
+        "204":
+          description: 会话已清除，Cookie 已过期。
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+  /:
+    get:
+      tags: [monitor]
+      summary: 只读状态页
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: 状态页面；不包含任何写入或发射控件。
+          content:
+            text/html:
+              schema:
+                type: string
+        "302":
+          description: 无有效会话时跳转到 /login。
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+  /assets/app.js:
+    get:
+      tags: [monitor]
+      summary: 内置只读页面脚本
+      security: []
+      responses:
+        "200":
+          description: 本地 JavaScript，不加载外部脚本。
+          content:
+            application/javascript:
+              schema:
+                type: string
+  /assets/style.css:
+    get:
+      tags: [monitor]
+      summary: 内置只读页面样式
+      security: []
+      responses:
+        "200":
+          description: 本地 CSS，不加载外部资源。
+          content:
+            text/css:
+              schema:
+                type: string
+  /api/v1/snapshot:
+    get:
+      tags: [monitor]
+      summary: 获取只读快照
+      description: |
+        快照只能反映最近一次成功读取或通知。
+        已有最后已知快照时，即使连接断开或超过 staleAfterMs 也返回 200，并将 stale 设为 true。
+        未读取成功的数据字段必须为 null；从未成功读取过快照且电台离线时才返回 503。
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: 当前只读快照；电台离线时仍可返回最后已知快照，并通过 stale=true 标记过期。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Snapshot"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          description: 服务从未成功读取过快照且电台离线；已有缓存快照时不得使用此响应。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/events:
+    get:
+      tags: [monitor]
+      summary: Server-Sent Events 摘要流
+      description: |
+        事件只包含 instanceId、revision、updatedAt、stale 和心跳。
+        完整状态由客户端重新拉取 /api/v1/snapshot。
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: SSE 长连接
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+            Connection:
+              schema:
+                type: string
+                example: keep-alive
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: |
+                  event: ready
+                  id: gw-7f3c2a91:42
+                  data: {"instanceId":"gw-7f3c2a91","revision":42}
+
+                  event: heartbeat
+                  data: {"at":"2026-11-27T14:25:18Z"}
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: n75_session
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: n75_<random>
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [ok, service, version]
+      properties:
+        ok:
+          type: boolean
+          example: true
+        service:
+          type: string
+          example: n7500link-gateway
+        version:
+          type: string
+          example: 0.3.0
+    Error:
+      type: object
+      additionalProperties: false
+      required: [ok, code, message, requestId]
+      properties:
+        ok:
+          type: boolean
+          example: false
+        code:
+          type: string
+          enum:
+            - AUTH_REQUIRED
+            - AUTH_FAILED
+            - SESSION_EXPIRED
+            - RATE_LIMITED
+            - RADIO_OFFLINE
+            - METHOD_NOT_ALLOWED
+            - NOT_FOUND
+            - PAYLOAD_TOO_LARGE
+            - TOO_MANY_CLIENTS
+            - INTERNAL_ERROR
+        message:
+          type: string
+        requestId:
+          type: string
+          example: req-7a18c2
+    Gateway:
+      type: object
+      additionalProperties: false
+      required: [state, version, startedAt, lastErrorCode]
+      properties:
+        state:
+          type: string
+          enum: [STOPPED, STARTING, CONNECTING_BLUETOOTH, ONLINE, DEGRADED, RECONNECTING, FAULT]
+        version:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastErrorCode:
+          type: string
+          nullable: true
+    Connection:
+      type: object
+      additionalProperties: false
+      required: [state, deviceLabel, connectedAt, lastError]
+      properties:
+        state:
+          type: string
+          enum: [DISCONNECTED, CONNECTING, CONNECTED, RECONNECTING, FAULT]
+        deviceLabel:
+          type: string
+          nullable: true
+          description: 仅设备名称或短标签，不返回蓝牙 MAC。
+        connectedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastError:
+          type: string
+          nullable: true
+    Capabilities:
+      type: object
+      additionalProperties: false
+      required: [fmReceive, dmr, vfo]
+      properties:
+        fmReceive:
+          type: boolean
+        dmr:
+          type: boolean
+        vfo:
+          type: boolean
+    Settings:
+      type: object
+      additionalProperties: false
+      required: [channelA, channelB, currentSide, scan, squelch, dualMode]
+      properties:
+        channelA:
+          type: integer
+          nullable: true
+          minimum: 0
+        channelB:
+          type: integer
+          nullable: true
+          minimum: 0
+        currentSide:
+          type: string
+          nullable: true
+          enum: [A, B, null]
+        scan:
+          type: boolean
+          nullable: true
+        squelch:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 15
+        dualMode:
+          type: string
+          nullable: true
+          enum: [A, B, null]
+    RadioStatus:
+      type: object
+      additionalProperties: false
+      required: [power, transmitting, squelchOpen, receiving, scanning, fmBroadcast, currentChannel, currentZone, rssiLevel]
+      properties:
+        power:
+          type: boolean
+          nullable: true
+        transmitting:
+          type: boolean
+          nullable: true
+        squelchOpen:
+          type: boolean
+          nullable: true
+        receiving:
+          type: boolean
+          nullable: true
+        scanning:
+          type: boolean
+          nullable: true
+        fmBroadcast:
+          type: boolean
+          nullable: true
+        currentChannel:
+          type: integer
+          nullable: true
+          minimum: 0
+        currentZone:
+          type: integer
+          nullable: true
+          minimum: 0
+        rssiLevel:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 15
+    Radio:
+      type: object
+      additionalProperties: false
+      required: [productId, softwareVersion, channelCount, zoneCount, bandCount, capabilities, settings, status]
+      properties:
+        productId:
+          type: string
+          nullable: true
+        softwareVersion:
+          type: string
+          nullable: true
+        channelCount:
+          type: integer
+          nullable: true
+        zoneCount:
+          type: integer
+          nullable: true
+        bandCount:
+          type: integer
+          nullable: true
+        capabilities:
+          $ref: "#/components/schemas/Capabilities"
+        settings:
+          $ref: "#/components/schemas/Settings"
+        status:
+          $ref: "#/components/schemas/RadioStatus"
+    Channel:
+      type: object
+      additionalProperties: false
+      required: [id, name, rxMHz, txMHz]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          nullable: true
+        rxMHz:
+          type: number
+          format: double
+          nullable: true
+        txMHz:
+          type: number
+          format: double
+          nullable: true
+    Snapshot:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, ok, instanceId, revision, generatedAt, updatedAt, staleAfterMs, stale, source, gateway, connection, radio, volume, channel]
+      properties:
+        schemaVersion:
+          type: integer
+          enum: [1]
+        ok:
+          type: boolean
+          example: true
+        instanceId:
+          type: string
+          description: 服务每次启动生成的新实例标识。
+        revision:
+          type: integer
+          format: int64
+          minimum: 0
+        generatedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        staleAfterMs:
+          type: integer
+          example: 15000
+        stale:
+          type: boolean
+        source:
+          type: string
+          enum: [none, initial, poll, notification]
+        gateway:
+          $ref: "#/components/schemas/Gateway"
+        connection:
+          $ref: "#/components/schemas/Connection"
+        radio:
+          $ref: "#/components/schemas/Radio"
+        volume:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 15
+        channel:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/Channel"
+  responses:
+    AuthRequired:
+      description: 需要有效访问令牌或会话。
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+            example: Bearer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    AuthFailed:
+      description: 访问令牌或会话无效；不区分具体失败原因。
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+            example: Bearer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: 连续鉴权失败或客户端数量超过限制。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    PayloadTooLarge:
+      description: 请求体超过 1024 字节。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: 服务内部错误；不返回栈或敏感信息。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

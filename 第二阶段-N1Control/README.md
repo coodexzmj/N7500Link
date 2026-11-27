@@ -1,8 +1,8 @@
 # N1Control · N7500 低风险控制
 
-项目阶段：第二阶段（低风险控制 MVP）  
-版本：0.2.1  
-包名：`com.bi4byf.n7500link.control`  
+项目阶段：第二阶段（低风险控制 MVP）
+版本：0.2.1
+包名：`com.bi4byf.n7500link.control`
 作者署名：BI4BYF
 
 ## 1. 本阶段目标
@@ -30,7 +30,7 @@
 - `WRITE_RF_CH` 信道记录写入
 - 频率、亚音、带宽、功率编辑
 - 固件升级
-- C4FM 或其他语音解码
+- 其他语音解码
 - 自动盲重试或多写并发
 
 APK 不申请 `INTERNET` 权限。发送入口只接受上表中需要的读取命令、`SET_VOLUME` 和 `WRITE_SETTINGS`。
