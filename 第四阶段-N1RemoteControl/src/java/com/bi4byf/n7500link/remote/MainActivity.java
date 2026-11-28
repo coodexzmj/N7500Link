@@ -12,24 +12,24 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.SharedPreferences;
+import android.content.res.ColorStateList;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.StateListDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.view.Gravity;
-import android.view.KeyEvent;
-import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.Spinner;
 import android.widget.Switch;
 import android.widget.TextView;
@@ -61,7 +61,10 @@ public final class MainActivity extends Activity {
     private TextView tokenView;
     private TextView headerStatusView;
     private TextView headerDotView;
-    private PositionStableScrollView mainScroll;
+    private FrameLayout pageHost;
+    private final ArrayList<View> pages = new ArrayList<>();
+    private final ArrayList<Button> menuButtons = new ArrayList<>();
+    private int currentPage = -1;
     private Button startButton;
     private Button stopButton;
     private Button rotateButton;
@@ -157,40 +160,6 @@ public final class MainActivity extends Activity {
         if (requestCode == REQUEST_ENABLE_BT) refreshDevices();
     }
 
-    /** N1 boxes usually have a pointer or remote, not a touchscreen. */
-    @Override public boolean dispatchGenericMotionEvent(MotionEvent event) {
-        if (event.getAction() == MotionEvent.ACTION_SCROLL && mainScroll != null) {
-            float delta = event.getAxisValue(MotionEvent.AXIS_VSCROLL);
-            if (delta != 0f) {
-                mainScroll.scrollByUser(delta < 0f ? dp(120) : -dp(120));
-                return true;
-            }
-        }
-        return super.dispatchGenericMotionEvent(event);
-    }
-
-    /**
-     * D-pad focus navigation is intentional: release the user anchor first so
-     * the focused field can be brought into view instead of fighting the restore.
-     */
-    @Override public boolean dispatchKeyEvent(KeyEvent event) {
-        if (event.getAction() == KeyEvent.ACTION_DOWN && mainScroll != null) {
-            int keyCode = event.getKeyCode();
-            if (keyCode == KeyEvent.KEYCODE_DPAD_UP
-                    || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
-                    || keyCode == KeyEvent.KEYCODE_DPAD_LEFT
-                    || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
-                    || keyCode == KeyEvent.KEYCODE_PAGE_UP
-                    || keyCode == KeyEvent.KEYCODE_PAGE_DOWN
-                    || keyCode == KeyEvent.KEYCODE_MOVE_HOME
-                    || keyCode == KeyEvent.KEYCODE_MOVE_END
-                    || keyCode == KeyEvent.KEYCODE_TAB) {
-                mainScroll.releaseAnchorForFocusNavigation();
-            }
-        }
-        return super.dispatchKeyEvent(event);
-    }
-
     private void buildUi() {
         LinearLayout window = new LinearLayout(this);
         window.setOrientation(LinearLayout.VERTICAL);
@@ -242,17 +211,6 @@ public final class MainActivity extends Activity {
         statusRow.addView(headerStatusView);
         titleColumn.addView(statusRow);
 
-        LinearLayout scrollTools = new LinearLayout(this);
-        scrollTools.setOrientation(LinearLayout.HORIZONTAL);
-        scrollTools.setGravity(Gravity.CENTER_VERTICAL);
-        Button scrollUp = makeToolbarButton("上翻");
-        Button scrollDown = makeToolbarButton("下翻");
-        Button scrollBottom = makeToolbarButton("到底");
-        scrollTools.addView(scrollUp);
-        scrollTools.addView(scrollDown);
-        scrollTools.addView(scrollBottom);
-        header.addView(scrollTools);
-
         TextView readonly = new TextView(this);
         readonly.setText("低风险控制");
         readonly.setTextSize(11);
@@ -264,23 +222,58 @@ public final class MainActivity extends Activity {
         window.addView(header, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        mainScroll = new PositionStableScrollView(this);
-        mainScroll.setFillViewport(true);
-        mainScroll.setBackgroundColor(Color.rgb(237, 237, 237));
-        mainScroll.setVerticalScrollBarEnabled(true);
-        mainScroll.setScrollbarFadingEnabled(false);
-        scrollUp.setOnClickListener(v -> mainScroll.scrollByUser(-dp(620)));
-        scrollDown.setOnClickListener(v -> mainScroll.scrollByUser(dp(620)));
-        scrollBottom.setOnClickListener(v -> mainScroll.scrollToBottom());
-        LinearLayout root = new LinearLayout(this);
-        root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(18), dp(16), dp(18), dp(72));
-        mainScroll.addView(root, new ScrollView.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        window.addView(mainScroll, new LinearLayout.LayoutParams(
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.HORIZONTAL);
+        body.setPadding(dp(12), dp(12), dp(12), dp(8));
+
+        LinearLayout menuBar = new LinearLayout(this);
+        menuBar.setOrientation(LinearLayout.VERTICAL);
+        menuBar.setPadding(dp(8), dp(10), dp(8), dp(8));
+        menuBar.setBackground(rounded(Color.rgb(250, 250, 250), 12,
+                Color.rgb(222, 224, 226)));
+        body.addView(menuBar, new LinearLayout.LayoutParams(dp(184),
+                ViewGroup.LayoutParams.MATCH_PARENT));
+
+        TextView menuTitle = valueText("功能菜单", 11, Color.rgb(145, 145, 145));
+        menuTitle.setTypeface(Typeface.DEFAULT_BOLD);
+        menuTitle.setPadding(dp(12), 0, 0, dp(8));
+        menuBar.addView(menuTitle, matchWrap());
+
+        String[] menuLabels = {
+                "运行状态", "蓝牙电台", "网络设置", "运行选项", "网关与令牌"
+        };
+        for (int i = 0; i < menuLabels.length; i++) {
+            final int pageIndex = i;
+            Button menuButton = makeMenuButton(menuLabels[i]);
+            menuButton.setOnClickListener(v -> selectPage(pageIndex));
+            LinearLayout.LayoutParams menuParams = matchWrap();
+            menuParams.height = dp(50);
+            menuParams.bottomMargin = dp(6);
+            menuBar.addView(menuButton, menuParams);
+            menuButtons.add(menuButton);
+        }
+
+        LinearLayout rightColumn = new LinearLayout(this);
+        rightColumn.setOrientation(LinearLayout.VERTICAL);
+        rightColumn.setPadding(dp(10), 0, 0, 0);
+        body.addView(rightColumn, new LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 1f));
+
+        pageHost = new FrameLayout(this);
+        rightColumn.addView(pageHost, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        TextView footer = valueText("作者 BI4BYF · 低风险控制版本 0.4.1 · "
+                + "不提供 PTT、音频或频率/亚音/信道记录写入", 10, Color.rgb(128, 128, 128));
+        footer.setGravity(Gravity.CENTER_HORIZONTAL);
+        footer.setPadding(0, dp(5), 0, dp(2));
+        rightColumn.addView(footer, matchWrap());
+
+        window.addView(body, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         setContentView(window);
 
+        LinearLayout statusPage = pageContainer();
         LinearLayout statusCard = cardContainer();
         addCardTitle(statusCard, "运行状态", "前台服务直接持有蓝牙串口");
         addressView = valueText("监听地址：尚未启动", 15, Color.rgb(25, 25, 25));
@@ -288,12 +281,14 @@ public final class MainActivity extends Activity {
         statusCard.addView(addressView, matchWrap());
         statusView = valueText("网关未启动。", 13, Color.rgb(53, 53, 53));
         statusView.setLineSpacing(dp(3), 1.0f);
-        statusView.setMinHeight(dp(190));
         statusView.setTextIsSelectable(true);
         statusView.setPadding(0, dp(6), 0, 0);
-        statusCard.addView(statusView, matchWrap());
-        root.addView(statusCard, cardParams());
+        statusCard.addView(statusView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        statusPage.addView(statusCard, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
+        LinearLayout radioPage = pageContainer();
         LinearLayout radioCard = cardContainer();
         addCardTitle(radioCard, "蓝牙电台", "选择已由系统配对过的 N7500");
         deviceSpinner = new Spinner(this);
@@ -310,8 +305,9 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams scanParams = matchWrap();
         scanParams.topMargin = dp(8);
         radioCard.addView(scanButton, scanParams);
-        root.addView(radioCard, cardParams());
+        radioPage.addView(radioCard, cardParams());
 
+        LinearLayout accessPage = pageContainer();
         LinearLayout accessCard = cardContainer();
         addCardTitle(accessCard, "访问模式", "默认只监听本机，不开放公网端口");
         modeSpinner = new Spinner(this);
@@ -328,8 +324,9 @@ public final class MainActivity extends Activity {
         warning.setLineSpacing(dp(2), 1.0f);
         warning.setPadding(0, dp(10), 0, 0);
         accessCard.addView(warning, matchWrap());
-        root.addView(accessCard, cardParams());
+        accessPage.addView(accessCard, cardParams());
 
+        LinearLayout optionsPage = pageContainer();
         LinearLayout optionsCard = cardContainer();
         addCardTitle(optionsCard, "运行选项", "开机恢复、前台服务与屏幕常亮");
         bootSwitch = new Switch(this);
@@ -348,8 +345,9 @@ public final class MainActivity extends Activity {
         screenSwitch.setText("保持屏幕常亮（N1 长时间运行建议开启）");
         screenSwitch.setTextColor(Color.rgb(35, 35, 35));
         optionsCard.addView(screenSwitch, matchWrap());
-        root.addView(optionsCard, cardParams());
+        optionsPage.addView(optionsCard, cardParams());
 
+        LinearLayout gatewayPage = pageContainer();
         LinearLayout actionCard = cardContainer();
         addCardTitle(actionCard, "网关控制", "启动服务后可访问本地远程控制页面");
         LinearLayout actionRow = horizontalRow();
@@ -383,7 +381,7 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams openParams = matchWrap();
         openParams.topMargin = dp(6);
         actionCard.addView(openPageButton, openParams);
-        root.addView(actionCard, cardParams());
+        gatewayPage.addView(actionCard, cardParams());
 
         LinearLayout tokenCard = cardContainer();
         tokenCard.setBackground(rounded(Color.rgb(255, 249, 234), 10, Color.rgb(239, 221, 184)));
@@ -394,15 +392,32 @@ public final class MainActivity extends Activity {
         tokenView.setTextIsSelectable(true);
         tokenView.setPadding(0, dp(5), 0, 0);
         tokenCard.addView(tokenView, matchWrap());
-        root.addView(tokenCard, cardParams());
+        gatewayPage.addView(tokenCard, cardParams());
 
-        TextView footer = valueText("作者 BI4BYF · 低风险控制版本 0.4.0\n"
-                + "仅开放音量、扫描和信道 A/B；不提供 PTT、音频、频率/亚音写入或固件操作。", 11,
-                Color.rgb(128, 128, 128));
-        footer.setGravity(Gravity.CENTER_HORIZONTAL);
-        footer.setLineSpacing(dp(2), 1.0f);
-        root.addView(footer, matchWrap());
+        selectPage(0);
     }
+
+    private LinearLayout pageContainer() {
+        LinearLayout page = new LinearLayout(this);
+        page.setOrientation(LinearLayout.VERTICAL);
+        page.setVisibility(View.GONE);
+        pageHost.addView(page, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        pages.add(page);
+        return page;
+    }
+
+    private void selectPage(int index) {
+        if (index < 0 || index >= pages.size()) return;
+        currentPage = index;
+        for (int i = 0; i < pages.size(); i++) {
+            pages.get(i).setVisibility(i == index ? View.VISIBLE : View.GONE);
+        }
+        for (int i = 0; i < menuButtons.size(); i++) {
+            menuButtons.get(i).setSelected(i == index);
+        }
+    }
+
 
     private void loadSavedSelection() {
         String mode = preferences.getString(GatewayContract.PREF_BIND_MODE,
@@ -554,7 +569,6 @@ public final class MainActivity extends Activity {
     }
 
     private void renderStatus() {
-        if (mainScroll != null) mainScroll.preservePosition();
         renderStatusContent();
     }
 
@@ -794,17 +808,28 @@ public final class MainActivity extends Activity {
         return button;
     }
 
-    private Button makeToolbarButton(String text) {
+    private Button makeMenuButton(String text) {
         Button button = makeButton(text);
-        button.setTextSize(12);
-        button.setTextColor(Color.WHITE);
-        button.setBackground(rounded(0x33FFFFFF, 5, 0x66FFFFFF));
-        button.setMinWidth(dp(54));
-        button.setMinHeight(dp(34));
-        button.setPadding(dp(8), 0, dp(8), 0);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(54), dp(34));
-        params.leftMargin = dp(4);
-        button.setLayoutParams(params);
+        button.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
+        button.setTextSize(14);
+        button.setMinHeight(dp(50));
+        button.setPadding(dp(14), 0, dp(10), 0);
+        button.setFocusable(true);
+        button.setClickable(true);
+
+        StateListDrawable background = new StateListDrawable();
+        background.addState(new int[] {android.R.attr.state_selected},
+                rounded(Color.rgb(7, 193, 96), 7, 0));
+        background.addState(new int[] {android.R.attr.state_focused},
+                rounded(Color.rgb(224, 247, 235), 7, Color.rgb(7, 193, 96)));
+        background.addState(new int[] {android.R.attr.state_pressed},
+                rounded(Color.rgb(205, 242, 222), 7, Color.rgb(7, 193, 96)));
+        background.addState(new int[] {}, rounded(Color.TRANSPARENT, 7, 0));
+        button.setBackground(background);
+        button.setTextColor(new ColorStateList(
+                new int[][] {new int[] {android.R.attr.state_selected},
+                        new int[] {android.R.attr.state_focused}, new int[] {}},
+                new int[] {Color.WHITE, Color.rgb(7, 150, 80), Color.rgb(44, 44, 44)}));
         return button;
     }
 
@@ -850,149 +875,4 @@ public final class MainActivity extends Activity {
         }
     }
 
-    /**
-     * Status text changes once per second. The ScrollView keeps an anchor only
-     * after an explicit user scroll, then restores that anchor after background
-     * layouts and focus requests. Background refreshes can never overwrite it
-     * with the current top position.
-     */
-    private static final class PositionStableScrollView extends ScrollView {
-        private static final long LAYOUT_PRESERVE_MS = 700L;
-        private static final int ANCHOR_NONE = -1;
-
-        private int anchorY = ANCHOR_NONE;
-        private boolean anchorAtBottom;
-        private boolean touching;
-        private boolean followUserScroll;
-        private boolean restoringAnchor;
-
-        private final Runnable settleUserScroll = new Runnable() {
-            @Override public void run() {
-                if (touching) return;
-                followUserScroll = false;
-                anchorAtBottom = false;
-                anchorY = getScrollY();
-            }
-        };
-
-        PositionStableScrollView(Context context) {
-            super(context);
-            setFocusable(true);
-            setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);
-        }
-
-        void preservePosition() {
-            if (touching || followUserScroll || anchorY == ANCHOR_NONE) return;
-            restoreAnchor();
-        }
-
-        void scrollByUser(int deltaY) {
-            removeCallbacks(settleUserScroll);
-            touching = false;
-            followUserScroll = false;
-            anchorAtBottom = false;
-            anchorY = getScrollY();
-            scrollBy(0, deltaY);
-            anchorY = getScrollY();
-        }
-
-        void scrollToBottom() {
-            removeCallbacks(settleUserScroll);
-            touching = false;
-            followUserScroll = false;
-            anchorAtBottom = true;
-            anchorY = maxScrollY();
-            scrollTo(0, anchorY);
-        }
-
-        void releaseAnchorForFocusNavigation() {
-            removeCallbacks(settleUserScroll);
-            touching = false;
-            followUserScroll = false;
-            restoringAnchor = false;
-            anchorAtBottom = false;
-            anchorY = ANCHOR_NONE;
-        }
-
-        @Override protected void onLayout(boolean changed, int left, int top,
-                                           int right, int bottom) {
-            super.onLayout(changed, left, top, right, bottom);
-            if (anchorY != ANCHOR_NONE) restoreAnchor();
-        }
-
-        @Override public void requestChildFocus(View child, View focused) {
-            if (anchorY == ANCHOR_NONE) {
-                super.requestChildFocus(child, focused);
-                return;
-            }
-            boolean previous = restoringAnchor;
-            restoringAnchor = true;
-            try {
-                super.requestChildFocus(child, focused);
-            } finally {
-                restoringAnchor = previous;
-            }
-            restoreAnchor();
-        }
-
-        @Override protected void onScrollChanged(int left, int top, int oldLeft, int oldTop) {
-            super.onScrollChanged(left, top, oldLeft, oldTop);
-            if (followUserScroll && !restoringAnchor) {
-                anchorAtBottom = false;
-                anchorY = top;
-            }
-        }
-
-        @Override public void computeScroll() {
-            super.computeScroll();
-            if (followUserScroll && !restoringAnchor) {
-                anchorAtBottom = false;
-                anchorY = getScrollY();
-            }
-        }
-
-        @Override public boolean onTouchEvent(MotionEvent event) {
-            int action = event.getActionMasked();
-            if (action == MotionEvent.ACTION_DOWN) {
-                removeCallbacks(settleUserScroll);
-                touching = true;
-                followUserScroll = true;
-                anchorAtBottom = false;
-                anchorY = getScrollY();
-            }
-            boolean handled = super.onTouchEvent(event);
-            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
-                touching = false;
-                followUserScroll = true;
-                removeCallbacks(settleUserScroll);
-                postDelayed(settleUserScroll, LAYOUT_PRESERVE_MS);
-            }
-            return handled;
-        }
-
-        private void restoreAnchor() {
-            if (anchorY == ANCHOR_NONE) return;
-            int target = anchorAtBottom ? maxScrollY() : clampToContent(anchorY);
-            if (getScrollY() != target) {
-                boolean previous = restoringAnchor;
-                restoringAnchor = true;
-                try {
-                    scrollTo(0, target);
-                } finally {
-                    restoringAnchor = previous;
-                }
-            }
-            if (!anchorAtBottom) anchorY = getScrollY();
-        }
-
-        private int maxScrollY() {
-            View child = getChildAt(0);
-            if (child == null) return 0;
-            return Math.max(0, child.getHeight() - getHeight());
-        }
-
-        private int clampToContent(int scrollY) {
-            return Math.max(0, Math.min(scrollY, maxScrollY()));
-        }
-    }
 }

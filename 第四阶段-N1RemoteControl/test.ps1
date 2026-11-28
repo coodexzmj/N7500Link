@@ -95,8 +95,8 @@ foreach ($required in @(
 
 $manifest = [IO.File]::ReadAllText((Join-Path $project "src\AndroidManifest.xml"))
 $contractSource = [IO.File]::ReadAllText((Join-Path $packageDir "GatewayContract.java"))
-$expectedVersion = "0.4.0"
-$expectedVersionCode = "15"
+$expectedVersion = "0.4.1"
+$expectedVersionCode = "16"
 if ($contractSource.IndexOf("VERSION = `"$expectedVersion`"", [StringComparison]::Ordinal) -lt 0) {
     throw "版本门禁失败：GatewayContract 不是 $expectedVersion"
 }
@@ -132,16 +132,33 @@ function Assert-UiText([string]$textValue, [string]$expected, [string]$label) {
 }
 foreach ($item in @(
         @($indexSource, 'data-panel="control"', '远程控制页签'),
+        @($activitySource, '运行状态', '左侧菜单运行状态'),
+        @($activitySource, '蓝牙电台', '左侧菜单蓝牙电台'),
+        @($activitySource, '网络设置', '左侧菜单网络设置'),
+        @($activitySource, '运行选项', '左侧菜单运行选项'),
+        @($activitySource, '网关与令牌', '左侧菜单网关与令牌'),
         @($indexSource, 'id="volume-range"', '音量滑杆'),
         @($indexSource, 'id="scan-target"', '扫描开关'),
         @($indexSource, 'data-side="A"', 'A/B 切换'),
         @($indexSource, 'N1RemoteControl · N7500 低风险远程控制', '产品标题'),
-        @($indexSource, '版本 0.4.0 · 低风险控制', '版本标识'),
+        @($indexSource, '版本 0.4.1 · 低风险控制', '版本标识'),
         @($appSource, "confirm: true", '二次确认字段'),
         @($appSource, "clearCompletedTargets", '完成后清理目标脏值'),
         @($styleSource, '--wx-green: #07c160', '微信配色'),
-        @($activitySource, '低风险控制版本 0.4.0', '原生版本标识'))) {
+        @($activitySource, '低风险控制版本 0.4.1', '原生版本标识'))) {
     Assert-UiText $item[0] $item[1] $item[2]
+}
+
+if ($activitySource.IndexOf("ScrollView", [StringComparison]::Ordinal) -ge 0) {
+    throw "界面门禁失败：仍存在 ScrollView"
+}
+foreach ($removed in @("上翻", "下翻", "到底", "PositionStableScrollView", "mainScroll")) {
+    if ($activitySource.IndexOf($removed, [StringComparison]::Ordinal) -ge 0) {
+        throw "界面门禁失败：仍存在旧滚动实现 $removed"
+    }
+}
+foreach ($sidebarMarker in @("pageContainer", "selectPage", "makeMenuButton", "FrameLayout")) {
+    Assert-UiText $activitySource $sidebarMarker "固定左侧菜单布局"
 }
 
 Write-Host "第四阶段离线自测通过：$testRoot"

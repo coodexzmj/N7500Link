@@ -11,7 +11,7 @@ public final class GatewayContract {
 
     public static final String APP_NAME = "N1RemoteControl";
     public static final String PACKAGE_NAME = "com.bi4byf.n7500link.remote";
-    public static final String VERSION = "0.4.0";
+    public static final String VERSION = "0.4.1";
     public static final String ACTION_START =
             "com.bi4byf.n7500link.remote.action.START";
     public static final String ACTION_STOP =

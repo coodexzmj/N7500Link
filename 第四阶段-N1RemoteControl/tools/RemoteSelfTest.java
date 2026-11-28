@@ -183,7 +183,7 @@ public final class RemoteSelfTest {
             server.start();
 
             HttpResult health = request(server.port(), "GET", "/healthz", null, null);
-            check(health.status == 200 && health.body.contains("0.4.0"), "health endpoint");
+            check(health.status == 200 && health.body.contains(GatewayContract.VERSION), "health endpoint");
             HttpResult unauth = request(server.port(), "GET", "/api/v1/control", null, null);
             check(unauth.status == 401, "control requires authentication");
 

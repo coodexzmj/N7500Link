@@ -3,7 +3,7 @@ info:
   title: N1RemoteControl API
   version: "1.1.0"
   description: |
-    N1RemoteControl 0.4.0 远程接口：只读快照、SSE，以及音量、扫描、A/B 三项低风险控制。
+    N1RemoteControl 0.4.1 远程接口：只读快照、SSE，以及音量、扫描、A/B 三项低风险控制。
     写请求必须经过鉴权并显式携带 confirm:true；同一时间只允许一个控制操作。
     本合同不包含 PTT、音频、频率/亚音/带宽、信道记录、固件或工厂操作。
     访问令牌不得通过 URL 查询串传递。
@@ -421,7 +421,7 @@ components:
           example: N1RemoteControl
         version:
           type: string
-          example: 0.4.0
+          example: 0.4.1
     Error:
       type: object
       additionalProperties: false

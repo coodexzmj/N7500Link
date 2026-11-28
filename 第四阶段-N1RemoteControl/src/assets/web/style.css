@@ -272,7 +272,7 @@ dd.empty { color: #aaa; font-weight: 400; }
   .login-shell { padding: 32px 22px; }
 }
 
-/* 0.4.0 low-risk control additions */
+/* 0.4.1 fixed native sidebar UI */
 .risk-badge {
   padding: 3px 7px; border: 1px solid rgba(255,255,255,.38); border-radius: 5px;
   font-size: 11px; line-height: 1; opacity: .94;
