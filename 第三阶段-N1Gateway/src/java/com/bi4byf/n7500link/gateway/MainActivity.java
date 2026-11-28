@@ -21,8 +21,8 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
-import android.os.SystemClock;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -162,11 +162,33 @@ public final class MainActivity extends Activity {
         if (event.getAction() == MotionEvent.ACTION_SCROLL && mainScroll != null) {
             float delta = event.getAxisValue(MotionEvent.AXIS_VSCROLL);
             if (delta != 0f) {
-                mainScroll.scrollBy(0, delta < 0f ? dp(120) : -dp(120));
+                mainScroll.scrollByUser(delta < 0f ? dp(120) : -dp(120));
                 return true;
             }
         }
         return super.dispatchGenericMotionEvent(event);
+    }
+
+    /**
+     * D-pad focus navigation is intentional: release the user anchor first so
+     * the focused field can be brought into view instead of fighting the restore.
+     */
+    @Override public boolean dispatchKeyEvent(KeyEvent event) {
+        if (event.getAction() == KeyEvent.ACTION_DOWN && mainScroll != null) {
+            int keyCode = event.getKeyCode();
+            if (keyCode == KeyEvent.KEYCODE_DPAD_UP
+                    || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                    || keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                    || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                    || keyCode == KeyEvent.KEYCODE_PAGE_UP
+                    || keyCode == KeyEvent.KEYCODE_PAGE_DOWN
+                    || keyCode == KeyEvent.KEYCODE_MOVE_HOME
+                    || keyCode == KeyEvent.KEYCODE_MOVE_END
+                    || keyCode == KeyEvent.KEYCODE_TAB) {
+                mainScroll.releaseAnchorForFocusNavigation();
+            }
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     private void buildUi() {
@@ -247,12 +269,8 @@ public final class MainActivity extends Activity {
         mainScroll.setBackgroundColor(Color.rgb(237, 237, 237));
         mainScroll.setVerticalScrollBarEnabled(true);
         mainScroll.setScrollbarFadingEnabled(false);
-        scrollUp.setOnClickListener(v -> {
-            mainScroll.scrollBy(0, -dp(620));
-        });
-        scrollDown.setOnClickListener(v -> {
-            mainScroll.scrollBy(0, dp(620));
-        });
+        scrollUp.setOnClickListener(v -> mainScroll.scrollByUser(-dp(620)));
+        scrollDown.setOnClickListener(v -> mainScroll.scrollByUser(dp(620)));
         scrollBottom.setOnClickListener(v -> mainScroll.scrollToBottom());
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -378,7 +396,7 @@ public final class MainActivity extends Activity {
         tokenCard.addView(tokenView, matchWrap());
         root.addView(tokenCard, cardParams());
 
-        TextView footer = valueText("作者 BI4BYF · 安全版本 0.3.7 G1 只读\n"
+        TextView footer = valueText("作者 BI4BYF · 安全版本 0.3.8 G1 只读\n"
                 + "不提供音量、扫描、信道、发射、音频或固件操作。", 11,
                 Color.rgb(128, 128, 128));
         footer.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -536,7 +554,7 @@ public final class MainActivity extends Activity {
     }
 
     private void renderStatus() {
-        if (mainScroll != null) mainScroll.preservePosition(mainScroll.getScrollY());
+        if (mainScroll != null) mainScroll.preservePosition();
         renderStatusContent();
     }
 
@@ -833,37 +851,138 @@ public final class MainActivity extends Activity {
     }
 
     /**
-     * The status panel refreshes once per second. A normal ScrollView may let a
-     * later layout or focus request pull the viewport back to the first field.
-     * Keep the exact viewport during the short layout window after each refresh.
+     * Status text changes once per second. The ScrollView keeps an anchor only
+     * after an explicit user scroll, then restores that anchor after background
+     * layouts and focus requests. Background refreshes can never overwrite it
+     * with the current top position.
      */
     private static final class PositionStableScrollView extends ScrollView {
-        private static final long LAYOUT_PRESERVE_MS = 800L;
-        private int preservedY;
-        private long preserveUntil;
+        private static final long LAYOUT_PRESERVE_MS = 700L;
+        private static final int ANCHOR_NONE = -1;
+
+        private int anchorY = ANCHOR_NONE;
+        private boolean anchorAtBottom;
+        private boolean touching;
+        private boolean followUserScroll;
+        private boolean restoringAnchor;
+
+        private final Runnable settleUserScroll = new Runnable() {
+            @Override public void run() {
+                if (touching) return;
+                followUserScroll = false;
+                anchorAtBottom = false;
+                anchorY = getScrollY();
+            }
+        };
 
         PositionStableScrollView(Context context) {
             super(context);
+            setFocusable(true);
+            setDescendantFocusability(FOCUS_AFTER_DESCENDANTS);
         }
 
-        void preservePosition(int scrollY) {
-            preservedY = scrollY;
-            preserveUntil = SystemClock.uptimeMillis() + LAYOUT_PRESERVE_MS;
+        void preservePosition() {
+            if (touching || followUserScroll || anchorY == ANCHOR_NONE) return;
+            restoreAnchor();
+        }
+
+        void scrollByUser(int deltaY) {
+            removeCallbacks(settleUserScroll);
+            touching = false;
+            followUserScroll = false;
+            anchorAtBottom = false;
+            anchorY = getScrollY();
+            scrollBy(0, deltaY);
+            anchorY = getScrollY();
         }
 
         void scrollToBottom() {
-            preservedY = Integer.MAX_VALUE;
-            preserveUntil = SystemClock.uptimeMillis() + LAYOUT_PRESERVE_MS;
-            scrollTo(0, maxScrollY());
+            removeCallbacks(settleUserScroll);
+            touching = false;
+            followUserScroll = false;
+            anchorAtBottom = true;
+            anchorY = maxScrollY();
+            scrollTo(0, anchorY);
+        }
+
+        void releaseAnchorForFocusNavigation() {
+            removeCallbacks(settleUserScroll);
+            touching = false;
+            followUserScroll = false;
+            restoringAnchor = false;
+            anchorAtBottom = false;
+            anchorY = ANCHOR_NONE;
         }
 
         @Override protected void onLayout(boolean changed, int left, int top,
                                            int right, int bottom) {
-            int beforeLayout = getScrollY();
             super.onLayout(changed, left, top, right, bottom);
-            int target = SystemClock.uptimeMillis() <= preserveUntil
-                    ? preservedY : beforeLayout;
-            scrollTo(0, clampToContent(target));
+            if (anchorY != ANCHOR_NONE) restoreAnchor();
+        }
+
+        @Override public void requestChildFocus(View child, View focused) {
+            if (anchorY == ANCHOR_NONE) {
+                super.requestChildFocus(child, focused);
+                return;
+            }
+            boolean previous = restoringAnchor;
+            restoringAnchor = true;
+            try {
+                super.requestChildFocus(child, focused);
+            } finally {
+                restoringAnchor = previous;
+            }
+            restoreAnchor();
+        }
+
+        @Override protected void onScrollChanged(int left, int top, int oldLeft, int oldTop) {
+            super.onScrollChanged(left, top, oldLeft, oldTop);
+            if (followUserScroll && !restoringAnchor) {
+                anchorAtBottom = false;
+                anchorY = top;
+            }
+        }
+
+        @Override public void computeScroll() {
+            super.computeScroll();
+            if (followUserScroll && !restoringAnchor) {
+                anchorAtBottom = false;
+                anchorY = getScrollY();
+            }
+        }
+
+        @Override public boolean onTouchEvent(MotionEvent event) {
+            int action = event.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN) {
+                removeCallbacks(settleUserScroll);
+                touching = true;
+                followUserScroll = true;
+                anchorAtBottom = false;
+                anchorY = getScrollY();
+            }
+            boolean handled = super.onTouchEvent(event);
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) {
+                touching = false;
+                followUserScroll = true;
+                removeCallbacks(settleUserScroll);
+                postDelayed(settleUserScroll, LAYOUT_PRESERVE_MS);
+            }
+            return handled;
+        }
+
+        private void restoreAnchor() {
+            if (anchorY == ANCHOR_NONE) return;
+            int target = anchorAtBottom ? maxScrollY() : clampToContent(anchorY);
+            if (getScrollY() != target) {
+                boolean previous = restoringAnchor;
+                restoringAnchor = true;
+                try {
+                    scrollTo(0, target);
+                } finally {
+                    restoringAnchor = previous;
+                }
+            }
+            if (!anchorAtBottom) anchorY = getScrollY();
         }
 
         private int maxScrollY() {
@@ -873,7 +992,6 @@ public final class MainActivity extends Activity {
         }
 
         private int clampToContent(int scrollY) {
-            if (scrollY == Integer.MAX_VALUE) return maxScrollY();
             return Math.max(0, Math.min(scrollY, maxScrollY()));
         }
     }

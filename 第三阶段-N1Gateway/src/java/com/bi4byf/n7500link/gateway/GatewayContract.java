@@ -11,7 +11,7 @@ public final class GatewayContract {
 
     public static final String APP_NAME = "N1Gateway";
     public static final String PACKAGE_NAME = "com.bi4byf.n7500link.gateway";
-    public static final String VERSION = "0.3.7";
+    public static final String VERSION = "0.3.8";
     public static final String ACTION_BRIDGE_WAKE =
             "com.bi4byf.n7500link.gateway.action.BRIDGE_WAKE";
     public static final int SCHEMA_VERSION = 1;

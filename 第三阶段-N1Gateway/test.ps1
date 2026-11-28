@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$JdkRoot = "C:\adb-n1\toolchain\jdk-17.0.21+9"
 )
 
@@ -102,8 +102,8 @@ if ($contractSource.IndexOf('screen_always_on_init_fix_v3', [StringComparison]::
     throw "屏幕常亮升级修复门禁失败：缺少独立迁移键。"
 }
 
-$expectedVersion = "0.3.7"
-$expectedVersionCode = 13
+$expectedVersion = "0.3.8"
+$expectedVersionCode = 14
 $contractVersion = [Regex]::Match($contractSource, 'VERSION\s*=\s*"([^"]+)"').Groups[1].Value
 $manifestVersion = [Regex]::Match($manifest, 'android:versionName="([^"]+)"').Groups[1].Value
 $manifestVersionCodeText = [Regex]::Match($manifest, 'android:versionCode="([0-9]+)"').Groups[1].Value
@@ -133,10 +133,33 @@ foreach ($required in @('mainScroll', 'dispatchGenericMotionEvent', '上翻', '�
     }
 }
 foreach ($required in @('PositionStableScrollView', 'preservePosition',
-        'LAYOUT_PRESERVE_MS', 'scrollToBottom', 'setTextIfChanged')) {
+        'LAYOUT_PRESERVE_MS', 'scrollToBottom', 'scrollByUser',
+        'requestChildFocus', 'releaseAnchorForFocusNavigation',
+        'dispatchKeyEvent', 'onTouchEvent', 'setTextIfChanged')) {
     if ($activitySource.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
         throw "滚动位置保持门禁失败：MainActivity 缺少 $required"
     }
+}
+if ($activitySource.IndexOf('preservePosition(mainScroll.getScrollY())',
+        [StringComparison]::Ordinal) -ge 0) {
+    throw "滚动位置保持门禁失败：实时刷新不得重新捕获当前位置作为锚点。"
+}
+
+$toolChecks = 0
+$liveToolSource = [IO.File]::ReadAllText((Join-Path $project 'tools\Test-LiveGateway.ps1'))
+foreach ($required in @('TokenFile', 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
+        'invalid_token=401', 'EscapeDataString')) {
+    if ($liveToolSource.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
+        throw "实机验证工具门禁失败：Test-LiveGateway 缺少 $required"
+    }
+    $toolChecks++
+}
+$monitorToolSource = [IO.File]::ReadAllText((Join-Path $project 'tools\Monitor-LiveGateway.ps1'))
+foreach ($required in @('TokenFile', 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789')) {
+    if ($monitorToolSource.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
+        throw "实机验证工具门禁失败：Monitor-LiveGateway 缺少 $required"
+    }
+    $toolChecks++
 }
 
 $uiChecks = 0
@@ -169,3 +192,4 @@ Write-Host "网关离线自测通过：$testRoot"
 Write-Host "只读边界扫描通过：$($codeFiles.Count) 个源码/网页文件"
 Write-Host "熄屏保活扫描通过：CPU、Wi-Fi 与可选屏幕锁在服务启停时成对申请/释放"
 Write-Host "版本与微信风格界面门禁通过：$uiChecks 项（版本 $expectedVersion / code $expectedVersionCode）"
+Write-Host "实机验证工具门禁通过：$toolChecks 项（10 位令牌文件、错误令牌 401 与采样脚本一致）"

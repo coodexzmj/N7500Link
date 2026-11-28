@@ -57,7 +57,7 @@ paths:
                 token:
                   type: string
                   description: N1 本地生成的访问令牌。
-                  minLength: 20
+                  minLength: 10
                   maxLength: 256
       responses:
         "303":
@@ -207,7 +207,7 @@ components:
     bearerAuth:
       type: http
       scheme: bearer
-      bearerFormat: n75_<random>
+      bearerFormat: 10-character-token
   schemas:
     Health:
       type: object
