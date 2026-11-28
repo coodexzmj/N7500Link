@@ -23,15 +23,9 @@ if ([string]::IsNullOrWhiteSpace($Token) -eq [string]::IsNullOrWhiteSpace($Token
 $tokenValue = $Token.Trim()
 if ([string]::IsNullOrWhiteSpace($Token) -and -not [string]::IsNullOrWhiteSpace($TokenFile)) {
     $resolvedTokenFile = (Resolve-Path -LiteralPath $TokenFile -ErrorAction Stop).Path
-    $tokenText = [IO.File]::ReadAllText($resolvedTokenFile)
-    $match = [regex]::Match($tokenText, 'n75_[A-Za-z0-9_-]{32,}')
-    if ($match.Success) {
-        $tokenValue = $match.Value
-    } else {
-        $tokenValue = $tokenText.Trim()
-    }
+    $tokenValue = [IO.File]::ReadAllText($resolvedTokenFile).Trim()
 }
-if ($tokenValue -notmatch '^n75_[A-Za-z0-9_-]{32,}$') {
+if ($tokenValue -notmatch '^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{10}$') {
     throw "访问令牌格式无效。"
 }
 if ([string]::IsNullOrWhiteSpace($OutputPath)) {

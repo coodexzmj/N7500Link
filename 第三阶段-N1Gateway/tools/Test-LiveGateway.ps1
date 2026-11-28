@@ -1,6 +1,6 @@
 param(
-    [Parameter(Mandatory = $true)]
-    [string]$Token,
+    [string]$Token = "",
+    [string]$TokenFile = "",
     [string]$Adb = "C:\adb-n1\platform-tools\adb.exe",
     [int]$LocalPort = 18710,
     [int]$DevicePort = 8710,
@@ -8,8 +8,16 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-if ($Token.Length -lt 20 -or $Token.Length -gt 256) {
-    throw "访问令牌长度无效。"
+if ([string]::IsNullOrWhiteSpace($Token) -eq [string]::IsNullOrWhiteSpace($TokenFile)) {
+    throw "Token 与 TokenFile 必须且只能提供一个。"
+}
+$tokenValue = $Token.Trim()
+if ([string]::IsNullOrWhiteSpace($Token) -and -not [string]::IsNullOrWhiteSpace($TokenFile)) {
+    $resolvedTokenFile = (Resolve-Path -LiteralPath $TokenFile -ErrorAction Stop).Path
+    $tokenValue = [IO.File]::ReadAllText($resolvedTokenFile).Trim()
+}
+if ($tokenValue -notmatch '^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{10}$') {
+    throw "访问令牌格式无效。"
 }
 
 $useAdbForward = [string]::IsNullOrWhiteSpace($BaseUrl)
@@ -58,7 +66,7 @@ try {
     $appJs = Send-GatewayRequest GET "/assets/app.js" $null
     $style = Send-GatewayRequest GET "/assets/style.css" $null
     $anonymous = Send-GatewayRequest GET "/" $null
-    $login = Send-GatewayRequest POST "/api/v1/session" "token=$Token"
+    $login = Send-GatewayRequest POST "/api/v1/session" "token=$([Uri]::EscapeDataString($tokenValue))"
     $authorized = Send-GatewayRequest GET "/" $null
     $snapshotResult = Send-GatewayRequest GET "/api/v1/snapshot" $null
     $snapshot = $snapshotResult.Body | ConvertFrom-Json
@@ -95,6 +103,12 @@ try {
     $sseResponse.Dispose()
 
     $logout = Send-GatewayRequest DELETE "/api/v1/session" $null
+
+    $replacement = if ($tokenValue[0] -eq 'A') { 'B' } else { 'A' }
+    $invalidToken = $replacement + $tokenValue.Substring(1)
+    $invalidLogin = Send-GatewayRequest POST "/api/v1/session" "token=$([Uri]::EscapeDataString($invalidToken))"
+    $invalidToken = $null
+
     $checks = [ordered]@{
         "healthz=200" = ($health.Status -eq 200)
         "login_page=200" = ($loginPage.Status -eq 200)
@@ -112,6 +126,7 @@ try {
         "sse.snapshot" = ([bool]$events.snapshot)
         "sse.heartbeat" = ([bool]$events.heartbeat)
         "logout=204" = ($logout.Status -eq 204)
+        "invalid_token=401" = ($invalidLogin.Status -eq 401)
     }
     $failed = @()
     foreach ($name in $checks.Keys) {
@@ -130,7 +145,7 @@ try {
         & $Adb forward --remove "tcp:$LocalPort" 2>$null | Out-Null
     }
     foreach ($result in @($health, $loginPage, $appJs, $style, $anonymous, $login,
-            $authorized, $snapshotResult, $logout)) {
+            $authorized, $snapshotResult, $logout, $invalidLogin)) {
         if ($null -ne $result -and $null -ne $result.Response) { $result.Response.Dispose() }
     }
 }
