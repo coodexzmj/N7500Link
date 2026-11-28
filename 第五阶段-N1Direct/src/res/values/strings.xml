@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">N1Direct N7500 直连控制</string>
+    <string name="notification_channel">N1Direct 常驻服务</string>
+    <string name="notification_title">N1Direct 直连控制运行中</string>
+    <string name="notification_text">点按打开直连控制页</string>
+</resources>

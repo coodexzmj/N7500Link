@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>登录 · N1Direct</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body class="login-page">
+  <header class="wx-topbar login-topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">N</span>
+      <span class="brand-title">N7500 直连控制</span>
+      <span class="risk-badge">直连控制</span>
+    </div>
+  </header>
+  <main class="login-shell">
+    <div class="login-logo" aria-hidden="true">N</div>
+    <h1>访问 N7500</h1>
+    <p class="subtitle">输入 N1Direct 在 N1 应用内生成或主动设置的访问令牌。令牌不会写入网址、浏览器历史或服务器日志。</p>
+    {{LOGIN_ERROR}}
+    <form method="post" action="/api/v1/session" autocomplete="off">
+      <label for="token">访问令牌</label>
+      <input id="token" name="token" type="password" minlength="10" maxlength="64" required autofocus spellcheck="false" autocapitalize="characters" autocorrect="off" autocomplete="off" enterkeyhint="done" inputmode="text" placeholder="粘贴 10–64 位访问令牌">
+      <button type="submit">登录</button>
+    </form>
+    <div class="hint">
+      <p><strong>令牌在哪里？</strong>打开 N1 应用，进入“网关与令牌”，直接复制当前令牌并回到本页粘贴。令牌保存在 N1 私有存储，关闭页面后仍可再次复制。</p>
+      <p><strong>仍然失败？</strong>同一设备连续输错 5 次需等待约 1 分钟；令牌旋转或主动修改后，旧浏览器会话也会失效。</p>
+      <p>令牌中的字母不区分大小写，粘贴带入的空格和换行会自动忽略。页面能打开但登录失败，说明网络与服务正常，问题在令牌或临时限流。</p>
+    </div>
+  </main>
+</body>
+</html>

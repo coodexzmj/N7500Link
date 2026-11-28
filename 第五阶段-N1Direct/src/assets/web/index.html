@@ -1,0 +1,461 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>N1Direct · N7500 直连控制</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body class="app-page">
+  <header class="wx-topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">N</span>
+      <span class="brand-title">N7500 直连控制</span>
+      <span class="risk-badge">0.8.0 · 直连控制</span>
+    </div>
+    <div class="topbar-status" aria-live="polite">
+      <span id="connection-dot" class="dot unknown"></span>
+      <span id="connection-text">正在连接</span>
+      <button id="logout" class="topbar-button" type="button">退出登录</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <aside class="sidebar" aria-label="直连控制导航">
+      <div class="account-card">
+        <div class="avatar" aria-hidden="true">N75</div>
+        <div class="account-copy">
+          <strong id="side-device">N7500</strong>
+          <span id="side-summary">等待网关快照</span>
+        </div>
+        <span id="side-state-dot" class="dot unknown" aria-hidden="true"></span>
+      </div>
+
+      <nav class="nav-list">
+        <button class="nav-item active" type="button" data-panel="overview" aria-controls="panel-overview" aria-selected="true">
+          <span class="nav-icon" aria-hidden="true">◎</span><span>总览</span>
+        </button>
+        <button class="nav-item" type="button" data-panel="control" aria-controls="panel-control" aria-selected="false">
+          <span class="nav-icon" aria-hidden="true">◉</span><span>直连控制</span>
+        </button>
+        <button class="nav-item" type="button" data-panel="device" aria-controls="panel-device" aria-selected="false">
+          <span class="nav-icon" aria-hidden="true">▣</span><span>设备信息</span>
+        </button>
+        <button class="nav-item" type="button" data-panel="channel" aria-controls="panel-channel" aria-selected="false">
+          <span class="nav-icon" aria-hidden="true">#</span><span>当前信道</span>
+        </button>
+        <button class="nav-item" type="button" data-panel="channels" aria-controls="panel-channels" aria-selected="false">
+          <span class="nav-icon" aria-hidden="true">▤</span><span>信道目录</span>
+        </button>
+        <button class="nav-item" type="button" data-panel="audio" aria-controls="panel-audio" aria-selected="false">
+          <span class="nav-icon" aria-hidden="true">♫</span><span>音频房间</span>
+        </button>
+        <button class="nav-item" type="button" data-panel="gateway" aria-controls="panel-gateway" aria-selected="false">
+          <span class="nav-icon" aria-hidden="true">⇄</span><span>网关状态</span>
+        </button>
+        <button class="nav-item" type="button" data-panel="diagnostics" aria-controls="panel-diagnostics" aria-selected="false">
+          <span class="nav-icon" aria-hidden="true">⌁</span><span>诊断</span>
+        </button>
+        <button class="nav-item" type="button" data-panel="about" aria-controls="panel-about" aria-selected="false">
+          <span class="nav-icon" aria-hidden="true">i</span><span>关于</span>
+        </button>
+        <button class="nav-item" type="button" data-panel="security" aria-controls="panel-security" aria-selected="false">
+          <span class="nav-icon" aria-hidden="true">⌘</span><span>安全令牌</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <span>作者 BI4BYF</span>
+        <span>0.8.0 · 本地优先</span>
+      </div>
+    </aside>
+
+    <section class="content" aria-live="polite">
+      <article id="panel-overview" class="panel" data-panel="overview">
+        <header class="panel-heading">
+          <div>
+            <p class="eyebrow">N7500 WORKSPACE</p>
+            <h1>电台工作台</h1>
+            <p class="subtitle">查看蓝牙电台的实时快照，并可对音量、扫描和信道 A/B 进行带回读与回滚保护的低风险调整。</p>
+          </div>
+          <span id="freshness" class="status-pill">等待快照</span>
+        </header>
+
+        <div class="channel-hero">
+          <div class="channel-main">
+            <span class="hero-label">当前信道</span>
+            <strong id="overview-channel">—</strong>
+            <span id="overview-frequency" class="hero-frequency">—</span>
+          </div>
+          <div class="hero-side">
+            <span class="hero-label">接收状态</span>
+            <strong id="overview-receiving">—</strong>
+            <span id="revision" class="revision"></span>
+          </div>
+        </div>
+
+        <div class="summary-grid">
+          <div class="summary-item">
+            <span>设备</span>
+            <strong id="overview-device">—</strong>
+          </div>
+          <div class="summary-item">
+            <span>音量</span>
+            <strong id="overview-volume">—</strong>
+          </div>
+          <div class="summary-item">
+            <span>扫描 / A-B</span>
+            <strong id="overview-settings">—</strong>
+          </div>
+          <div class="summary-item">
+            <span>最近更新</span>
+            <strong id="overview-updated">—</strong>
+          </div>
+        </div>
+
+        <div class="control-entry-card">
+          <div>
+            <span class="entry-kicker">REMOTE CONTROL</span>
+            <strong>音量、扫描与 A/B 切换</strong>
+            <p>每次只执行一个操作：先读基线，再写入，再回读；不一致时最多自动回滚一次。</p>
+          </div>
+          <button id="open-control" class="wx-primary-button" type="button">打开控制</button>
+        </div>
+
+        <div class="notice-card">
+          <span class="notice-icon" aria-hidden="true">✓</span>
+          <div>
+            <strong>安全边界已启用</strong>
+            <p>已开放音量、扫描、信道 A/B、本地音频房间和历史录音。不包含 PTT、频率/亚音直接写入、信道写入或固件操作。</p>
+          </div>
+        </div>
+      </article>
+
+      <article id="panel-control" class="panel" data-panel="control" hidden>
+        <header class="panel-heading">
+          <div>
+            <p class="eyebrow">LOW-RISK CONTROL</p>
+            <h1>直连控制</h1>
+            <p class="subtitle">同一时刻只允许一个控制操作。写入后会主动读取目标值；不匹配时尝试恢复操作前的基线。</p>
+          </div>
+          <span id="control-state-pill" class="status-pill">读取控制状态</span>
+        </header>
+
+        <div id="control-guard-banner" class="control-guard">
+          <span id="control-guard-dot" class="dot unknown"></span>
+          <div>
+            <strong id="control-guard-title">正在读取控制状态</strong>
+            <p id="control-guard-detail">控制接口需要电台在线且当前没有其它操作。</p>
+          </div>
+        </div>
+
+        <div class="control-grid">
+          <section class="control-card">
+            <div class="control-card-head">
+              <div><span class="control-label">音量</span><h2>0 — 15</h2></div>
+              <span id="control-volume-current" class="control-current">当前 —</span>
+            </div>
+            <div class="range-wrap">
+              <input id="volume-range" type="range" min="0" max="15" step="1" value="0" aria-label="目标音量">
+              <output id="volume-value" for="volume-range">0</output>
+            </div>
+            <div class="range-scale"><span>静音</span><span>最大</span></div>
+            <button id="volume-apply" class="wx-primary-button full-width" type="button">应用音量</button>
+          </section>
+
+          <section class="control-card">
+            <div class="control-card-head">
+              <div><span class="control-label">扫描</span><h2>开 / 关</h2></div>
+              <span id="control-scan-current" class="control-current">当前 —</span>
+            </div>
+            <label class="switch-line" for="scan-target">
+              <span>目标状态</span>
+              <span class="switch-shell"><input id="scan-target" type="checkbox" role="switch"><span class="switch-track" aria-hidden="true"></span></span>
+            </label>
+            <p id="scan-target-text" class="control-caption">目标：OFF</p>
+            <button id="scan-apply" class="wx-primary-button full-width" type="button">应用扫描状态</button>
+          </section>
+
+          <section class="control-card">
+            <div class="control-card-head">
+              <div><span class="control-label">信道侧</span><h2>A / B</h2></div>
+              <span id="control-side-current" class="control-current">当前 —</span>
+            </div>
+            <div class="segment-control" role="group" aria-label="目标信道侧">
+              <button type="button" data-side="A" aria-pressed="false">A</button>
+              <button type="button" data-side="B" aria-pressed="false">B</button>
+            </div>
+            <p id="side-target-text" class="control-caption">未选择目标</p>
+            <button id="side-apply" class="wx-primary-button full-width" type="button">应用 A/B 切换</button>
+          </section>
+        </div>
+
+        <section class="control-result-card">
+          <div class="control-result-head">
+            <div>
+              <span class="control-label">最近一次控制</span>
+              <h2 id="control-operation-title">尚无操作</h2>
+            </div>
+            <span id="control-operation-id" class="operation-id">—</span>
+          </div>
+          <div class="control-timeline">
+            <div><span>基线</span><strong id="control-baseline">—</strong></div>
+            <div><span>目标</span><strong id="control-expected">—</strong></div>
+            <div><span>回读</span><strong id="control-observed">—</strong></div>
+            <div><span>结果</span><strong id="control-reason">—</strong></div>
+          </div>
+          <p id="control-result-note" class="result-note">提交控制后，这里会依次显示读取、写入、回读和回滚结果。</p>
+        </section>
+
+        <div class="safety-note">
+          <strong>为什么更安全</strong>
+          <p>控制不会直接发送固定参数：先读取操作前值，只写允许的单一项，再等待重新读取。写入超时、回读不一致或蓝牙断链时，会尝试恢复基线；失败原因会原样显示。</p>
+        </div>
+      </article>
+
+      <article id="panel-device" class="panel" data-panel="device" hidden>
+        <header class="panel-heading">
+          <div><p class="eyebrow">DEVICE</p><h1>设备信息</h1><p class="subtitle">由网关通过蓝牙读取的 N7500 设备信息。</p></div>
+        </header>
+        <div class="list-card">
+          <dl>
+            <dt>产品 ID</dt><dd id="product-id">—</dd>
+            <dt>固件 / 软件</dt><dd id="software-version">—</dd>
+            <dt>信道 / 区域</dt><dd id="channel-count">—</dd>
+            <dt>频段</dt><dd id="band-count">—</dd>
+            <dt>设备名称</dt><dd id="device-label">—</dd>
+          </dl>
+        </div>
+        <h2 class="group-title">设备能力</h2>
+        <div class="list-card compact">
+          <dl>
+            <dt>FM 接收</dt><dd id="fm-receive">—</dd>
+            <dt>DMR</dt><dd id="dmr">—</dd>
+            <dt>VFO</dt><dd id="vfo">—</dd>
+          </dl>
+        </div>
+      </article>
+
+      <article id="panel-channel" class="panel" data-panel="channel" hidden>
+        <header class="panel-heading">
+          <div><p class="eyebrow">CHANNEL</p><h1>当前信道</h1><p class="subtitle">当前选中信道、收发频率与实时接收状态。</p></div>
+        </header>
+        <div class="list-card">
+          <dl>
+            <dt>名称</dt><dd id="channel-name">—</dd>
+            <dt>接收频率</dt><dd id="rx-mhz">—</dd>
+            <dt>发射频率</dt><dd id="tx-mhz">—</dd>
+            <dt>当前信道</dt><dd id="current-channel">—</dd>
+            <dt>当前区域</dt><dd id="current-zone">—</dd>
+          </dl>
+        </div>
+        <h2 class="group-title">实时状态</h2>
+        <div class="list-card compact">
+          <dl>
+            <dt>接收</dt><dd id="receiving">—</dd>
+            <dt>静噪开启</dt><dd id="squelch-open">—</dd>
+            <dt>扫描</dt><dd id="scanning">—</dd>
+            <dt>RSSI</dt><dd id="rssi">—</dd>
+            <dt>音量</dt><dd id="volume">—</dd>
+            <dt>静噪等级</dt><dd id="squelch">—</dd>
+            <dt>双守模式</dt><dd id="dual-mode">—</dd>
+          </dl>
+        </div>
+      </article>
+
+      <article id="panel-channels" class="panel" data-panel="channels" hidden>
+        <header class="panel-heading">
+          <div><p class="eyebrow">CHANNEL CATALOG</p><h1>信道目录</h1><p class="subtitle">N1 通过蓝牙逐个读取 0—31 信道的名称与收发频率。此页只读，不写入信道记录。</p></div>
+          <span id="channel-summary" class="status-pill">等待目录</span>
+        </header>
+
+        <div class="channel-toolbar-card">
+          <div class="channel-toolbar">
+            <div class="channel-search-wrap">
+              <label for="channel-search">搜索信道</label>
+              <input id="channel-search" class="channel-search" type="search" autocomplete="off" placeholder="编号、名称或频率">
+            </div>
+            <button id="channel-refresh" class="wx-primary-button" type="button">刷新目录</button>
+          </div>
+          <p id="channel-summary-detail" class="catalog-meta">首次打开会自动读取；刷新期间页面会自动更新进度。</p>
+        </div>
+
+        <div id="channel-list" class="channel-list" role="list">
+          <div class="channel-empty">首次打开信道目录后，N1 将开始逐个读取 0—31 信道。</div>
+        </div>
+
+        <div class="tip-card">
+          <strong>只读目录</strong>
+          <p>目录读取不会改变电台当前信道、频率、亚音或功率。若某个信道读取失败，旧值会保留并明确标记为过期。</p>
+        </div>
+      </article>
+
+      <article id="panel-audio" class="panel" data-panel="audio" hidden>
+        <header class="panel-heading">
+          <div><p class="eyebrow">LOCAL AUDIO</p><h1>音频房间</h1><p class="subtitle">N1 在本地持续保存电台接收音频；手机在内网或经外网访问时，可进入房间收听直播并回放历史录音。</p></div>
+          <span id="audio-state-pill" class="status-pill">读取状态</span>
+        </header>
+
+        <section class="audio-status-card">
+          <div class="audio-status-copy">
+            <span class="control-label">音频链路</span>
+            <strong id="audio-state-text">正在读取音频状态</strong>
+            <p id="audio-tech-text">32 kHz · 16-bit · 单声道</p>
+          </div>
+          <div class="audio-status-actions">
+            <span id="audio-last-pcm" class="audio-meta-text">尚未收到 PCM</span>
+            <button id="audio-refresh" class="wx-secondary-button" type="button">刷新房间</button>
+          </div>
+        </section>
+
+        <form id="audio-room-form" class="audio-create-card">
+          <div>
+            <span class="control-label">本地自建房间</span>
+            <h2>新建房间</h2>
+            <p>房间数据和历史 WAV 都保存在 N1。自定义房间仅在有人进入直播时记录。</p>
+          </div>
+          <label for="audio-room-name">房间名称</label>
+          <input id="audio-room-name" class="settings-input" type="text" maxlength="40" required autocomplete="off" placeholder="例如：家中值守">
+          <button id="audio-room-create" class="wx-primary-button" type="submit">创建房间</button>
+        </form>
+
+        <section class="audio-live-card">
+          <div class="audio-live-head">
+            <div class="audio-live-identity">
+              <span id="audio-live-dot" class="dot unknown" aria-hidden="true"></span>
+              <div><span class="control-label">当前房间</span><h2 id="audio-room-title">尚未选择</h2></div>
+            </div>
+            <div class="audio-live-actions">
+              <button id="audio-live-start" class="wx-primary-button" type="button">开始收听直播</button>
+              <button id="audio-live-stop" class="wx-secondary-button" type="button" disabled>停止直播</button>
+            </div>
+          </div>
+          <div class="audio-volume-line">
+            <label for="audio-live-volume">手机播放音量</label>
+            <input id="audio-live-volume" type="range" min="0" max="100" step="1" value="80">
+            <output id="audio-live-volume-value" for="audio-live-volume">80%</output>
+          </div>
+          <p id="audio-live-help" class="audio-live-help">进入房间后点击“开始收听直播”。直播音频来自 N1 的蓝牙接收链路，历史片段约每 60 秒生成一个。</p>
+        </section>
+
+        <h2 class="group-title">本地房间</h2>
+        <div id="audio-room-list" class="audio-room-list" role="list">
+          <div class="channel-empty">正在读取 N1 本地音频房间。</div>
+        </div>
+
+        <section class="audio-history-card">
+          <div class="audio-history-head">
+            <div><span class="control-label">HISTORY</span><h2 id="audio-history-title">历史音频</h2></div>
+            <button id="audio-clips-refresh" class="wx-secondary-button" type="button">刷新历史</button>
+          </div>
+          <audio id="audio-clip-player" controls preload="none"></audio>
+          <div id="audio-history-list" class="audio-history-list" role="list">
+            <div class="channel-empty">选择房间后读取历史音频。</div>
+          </div>
+        </section>
+
+        <div class="tip-card">
+          <strong>远程访问说明</strong>
+          <p>历史录音保留在 N1 私有存储中，网页不缓存完整音频。节目录制、直播收听和下载均需要当前登录令牌；离开页面不会删除录音。</p>
+        </div>
+      </article>
+
+      <article id="panel-gateway" class="panel" data-panel="gateway" hidden>
+        <header class="panel-heading">
+          <div><p class="eyebrow">GATEWAY</p><h1>网关状态</h1><p class="subtitle">N1 前台服务、蓝牙连接和最后快照的汇总。</p></div>
+        </header>
+        <div class="list-card">
+          <dl>
+            <dt>网关状态</dt><dd id="gateway-state">—</dd>
+            <dt>连接状态</dt><dd id="connection-state">—</dd>
+            <dt>设备</dt><dd id="gateway-device-label">—</dd>
+            <dt>最近更新</dt><dd id="updated-at">—</dd>
+            <dt>数据来源</dt><dd id="source">—</dd>
+            <dt>最后错误</dt><dd id="last-error">—</dd>
+            <dt>实例</dt><dd id="instance-id">—</dd>
+          </dl>
+        </div>
+        <div class="tip-card">
+          <strong>页面与蓝牙隔离</strong>
+          <p>蓝牙串口只由 N1 前台服务持有。浏览器通过受鉴权接口请求控制，不能直接发送蓝牙原始字节。</p>
+        </div>
+      </article>
+
+      <article id="panel-security" class="panel" data-panel="security" hidden>
+        <header class="panel-heading">
+          <div><p class="eyebrow">ACCESS TOKEN</p><h1>安全令牌</h1><p class="subtitle">主动设置 10–64 位访问令牌。成功后所有已有浏览器登录立即失效，页面会返回登录页。</p></div>
+          <span id="token-status-pill" class="status-pill">读取状态</span>
+        </header>
+        <div class="list-card">
+          <dl>
+            <dt>令牌状态</dt><dd id="token-configured">—</dd>
+            <dt>最近设置</dt><dd id="token-created">—</dd>
+            <dt>格式规则</dt><dd>10–64 位 ASCII 字母或数字，字母自动转大写</dd>
+            <dt>传递方式</dt><dd>仅登录表单与 HttpOnly 会话 Cookie，不接受网址参数</dd>
+          </dl>
+        </div>
+        <form id="token-form" class="settings-form">
+          <label for="token-input">新访问令牌</label>
+          <input id="token-input" class="settings-input" type="password" minlength="10" maxlength="64" required autocomplete="new-password" spellcheck="false" autocapitalize="characters" placeholder="输入 10–64 位新令牌">
+          <label class="check-line" for="token-confirm"><input id="token-confirm" type="checkbox"> 我确认替换令牌并让所有浏览器退出登录</label>
+          <button id="token-apply" class="wx-primary-button" type="submit">设置新令牌</button>
+        </form>
+        <div class="tip-card">
+          <strong>忘记密码或登录被限流</strong>
+          <p>仍保持当前浏览器登录时可清除本机失败次数。令牌本身不会在网页中显示或回传。</p>
+          <button id="rate-limit-clear" class="wx-secondary-button" type="button">清除登录限流</button>
+        </div>
+      </article>
+      <article id="panel-diagnostics" class="panel" data-panel="diagnostics" hidden>
+        <header class="panel-heading">
+          <div><p class="eyebrow">DIAGNOSTICS</p><h1>连接诊断</h1><p class="subtitle">用于确认快照时效、网关链路和控制状态机。</p></div>
+        </header>
+        <div class="diagnostic-banner">
+          <span class="dot" id="diagnostic-dot"></span>
+          <div><strong id="diagnostic-title">等待诊断数据</strong><p id="diagnostic-detail">正在读取网关快照。</p></div>
+        </div>
+        <div class="list-card">
+          <dl>
+            <dt>快照时效</dt><dd id="diagnostic-freshness">—</dd>
+            <dt>修订号</dt><dd id="diagnostic-revision">—</dd>
+            <dt>最近更新</dt><dd id="diagnostic-updated">—</dd>
+            <dt>数据来源</dt><dd id="diagnostic-source">—</dd>
+            <dt>网关错误</dt><dd id="diagnostic-error">—</dd>
+            <dt>控制状态</dt><dd id="diagnostic-control">—</dd>
+            <dt>接口版本</dt><dd>API v1 · schema 1</dd>
+            <dt>写入边界</dt><dd>音量 / 扫描 / 信道 A-B</dd>
+          </dl>
+        </div>
+      </article>
+
+      <article id="panel-about" class="panel" data-panel="about" hidden>
+        <header class="panel-heading">
+          <div><p class="eyebrow">ABOUT</p><h1>关于</h1><p class="subtitle">面向 N1 + WENNUO N7500 的本地优先直连控制。</p></div>
+        </header>
+        <div class="about-card">
+          <div class="about-logo" aria-hidden="true">N</div>
+          <strong>N1Direct</strong>
+          <span>版本 0.8.0 · 直连控制</span>
+          <p>修改作者：BI4BYF<br>项目：N7500Link</p>
+        </div>
+        <div class="list-card compact">
+          <dl>
+            <dt>运行设备</dt><dd>斐讯 N1 / Android 7.1.2</dd>
+            <dt>电台</dt><dd>WENNUO N7500</dd>
+            <dt>控制范围</dt><dd>音量 / 扫描 / 信道 A-B / 信道目录只读</dd>
+            <dt>页面依赖</dt><dd>全部本地资源，无 CDN</dd>
+          </dl>
+        </div>
+        <div class="tip-card">
+          <strong>未包含的功能</strong>
+          <p>已提供 N1 本地音频录制、房间直播、历史回放和下载。PTT/发射音频闭环、频率与信道写入、固件升级和工厂复位仍在后续阶段规划中。</p>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <div id="notice" class="notice" hidden></div>
+  <script src="/assets/app.js"></script>
+</body>
+</html>

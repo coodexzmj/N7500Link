@@ -1,0 +1,1097 @@
+openapi: 3.0.3
+info:
+  title: N1Direct API
+  version: "1.2.0"
+  description: |
+    N1Direct 0.6.0 远程接口：只读快照、SSE、固定 0..31 信道目录，以及音量、扫描、A/B 三项直连控制。
+    信道目录是只读能力；首次列表请求会触发本链路 epoch 内最多一次自动刷新，也支持显式手动刷新。
+    写请求必须经过鉴权并显式携带 confirm:true；同一时间只允许一个控制操作。
+    本合同不包含 PTT、音频、频率/亚音/带宽、信道记录、固件或工厂操作。
+    访问令牌不得通过 URL 查询串传递。
+servers:
+  - url: http://127.0.0.1:8710
+    description: 默认回环地址；局域网或 Tailscale 地址由 N1 本地手动选择。
+tags:
+  - name: health
+  - name: auth
+  - name: monitor
+  - name: channels
+  - name: control
+paths:
+  /healthz:
+    get:
+      tags: [health]
+      summary: 最小健康检查
+      security: []
+      responses:
+        "200":
+          description: 进程正在运行；电台离线也会返回 200。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Health"
+        "500":
+          $ref: "#/components/responses/InternalError"
+  /login:
+    get:
+      tags: [auth]
+      summary: 内置访问令牌登录页
+      security: []
+      responses:
+        "200":
+          description: 登录页面
+          content:
+            text/html:
+              schema:
+                type: string
+  /api/v1/session:
+    post:
+      tags: [auth]
+      summary: 使用访问令牌建立 HttpOnly 会话
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token]
+              properties:
+                token:
+                  type: string
+                  description: N1 本地生成的访问令牌。
+                  minLength: 10
+                  maxLength: 256
+      responses:
+        "303":
+          description: 登录成功，设置 Cookie 并跳转到首页。
+          headers:
+            Set-Cookie:
+              description: HttpOnly; SameSite=Strict; Path=/; Max-Age=43200
+              schema:
+                type: string
+          content:
+            text/plain:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/AuthFailed"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+    delete:
+      tags: [auth]
+      summary: 退出当前浏览器会话
+      security:
+        - cookieAuth: []
+      responses:
+        "204":
+          description: 会话已清除，Cookie 已过期。
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+  /:
+    get:
+      tags: [monitor]
+      summary: 只读状态页
+      security:
+        - cookieAuth: []
+      responses:
+        "200":
+          description: 状态与控制页面；只提供音量、扫描和 A/B 三项直连控制，不包含发射或音频控件。
+          content:
+            text/html:
+              schema:
+                type: string
+        "303":
+          description: 无有效会话时跳转到 /login。
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+  /assets/app.js:
+    get:
+      tags: [monitor]
+      summary: 内置页面脚本
+      security: []
+      responses:
+        "200":
+          description: 本地 JavaScript，不加载外部脚本；只有三项受限控制接口。
+          content:
+            application/javascript:
+              schema:
+                type: string
+  /assets/style.css:
+    get:
+      tags: [monitor]
+      summary: 内置页面样式
+      security: []
+      responses:
+        "200":
+          description: 本地 CSS，不加载外部资源。
+          content:
+            text/css:
+              schema:
+                type: string
+  /api/v1/snapshot:
+    get:
+      tags: [monitor]
+      summary: 获取只读快照
+      description: |
+        快照只能反映最近一次成功读取或通知。
+        已有最后已知快照时，即使连接断开或超过 staleAfterMs 也返回 200，并将 stale 设为 true。
+        未读取成功的数据字段必须为 null；从未成功读取过快照且电台离线时才返回 503。
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: 当前只读快照；电台离线时仍可返回最后已知快照，并通过 stale=true 标记过期。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Snapshot"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          description: 服务从未成功读取过快照且电台离线；已有缓存快照时不得使用此响应。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/events:
+    get:
+      tags: [monitor]
+      summary: Server-Sent Events 摘要流
+      description: |
+        事件只包含 instanceId、revision、updatedAt、stale 和心跳。
+        完整状态由客户端重新拉取 /api/v1/snapshot。
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: SSE 长连接
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+            Connection:
+              schema:
+                type: string
+                example: keep-alive
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                example: |
+                  event: ready
+                  id: gw-7f3c2a91:42
+                  data: {"instanceId":"gw-7f3c2a91","revision":42}
+
+                  event: heartbeat
+                  data: {"at":"2026-11-27T14:25:18Z"}
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+  /api/v1/channels:
+    get:
+      tags: [channels]
+      summary: 获取固定 0..31 信道目录
+      description: |
+        首次已鉴权的列表请求会在当前蓝牙链路 epoch 内自动启动最多一次目录刷新。
+        REFRESHING 表示 N1 正在按 0..31 顺序逐个读取；PENDING 信道尚未尝试。
+        每个信道都必须单独标记 OK、TIMEOUT 或 ERROR，不能用 null 频率冒充读取成功。
+        OK 且 rxMHz/txMHz 均为 null 表示已成功读取的空信道。
+        失败项保留此前成功读取的名称和频率，并设置 stale=true 与 errorCode。
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: 当前目录快照；即使目录为 EMPTY 或 REFRESHING 也返回 200。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChannelCatalog"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          description: 电台尚未连接，目录读取不可用。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/channels/{id}:
+    get:
+      tags: [channels]
+      summary: 获取单个信道目录项
+      description: |
+        只返回缓存中的单个信道项；本请求不会单独触发全目录刷新。
+        id 必须是十进制整数 0..31。非数字路径返回 404，数值越界或整数溢出返回 400。
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: 固定信道编号 0..31。
+          schema:
+            type: integer
+            minimum: 0
+            maximum: 31
+      responses:
+        "200":
+          description: 单个信道目录项。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CatalogChannel"
+        "400":
+          description: 信道编号越界或整数溢出。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "404":
+          description: 路径不是十进制数字，或接口不存在。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          description: 电台尚未连接，目录读取不可用。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/channels/refresh:
+    post:
+      tags: [channels]
+      summary: 请求刷新信道目录
+      description: |
+        立即返回 202，不等待 32 个信道读取完成。
+        同一刷新代次正在执行时，重复请求是幂等的，不会并行启动第二个目录任务。
+        客户端随后轮询 GET /api/v1/channels，直到 state 为 COMPLETE 或 PARTIAL。
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "202":
+          description: 刷新已启动，或同代次刷新已经在执行。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChannelRefreshSubmission"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "405":
+          description: 只允许 POST。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          description: 电台未就绪，或刷新任务未能启动。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/control:
+    get:
+      tags: [control]
+      summary: 获取当前直连控制状态
+      description: |
+        可随时轮询。IDLE 表示没有活动操作；busy=true 表示一个操作仍在执行。
+        sent 表示目标写命令已经发出；rollbackSent 表示自动恢复写命令已经发出。
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: 当前控制状态，包含最近一次操作的基线与回读结果。
+          headers:
+            Cache-Control:
+              schema:
+                type: string
+                example: no-store
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlStatus"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          description: 电台控制会话尚未启动。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/v1/control/volume:
+    post:
+      tags: [control]
+      summary: 设置音量（0..15）
+      description: |
+        服务立即返回 202，后台依次执行基线读取、一次目标写入和一次延迟回读。
+        客户端应轮询 /api/v1/control，直到 state 为终态。不得自动重复提交写请求。
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlVolumeRequest"
+      responses:
+        "202":
+          description: 操作已接受并开始执行。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlSubmission"
+        "400":
+          description: JSON 无效、缺少 confirm:true 或音量超出 0..15。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "409":
+          description: 已有一个控制操作在执行。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlSubmission"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          description: 控制请求必须使用 application/json。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          description: 电台尚未就绪或控制调度器不可用。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ControlSubmission"
+                  - $ref: "#/components/schemas/Error"
+  /api/v1/control/scan:
+    post:
+      tags: [control]
+      summary: 设置扫描开关
+      description: |
+        先读取完整原始设置块，仅修改扫描位，再写入完整设置块。
+        一次请求只发一次目标写；回读不一致时最多发起一次原值回滚。
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlScanRequest"
+      responses:
+        "202":
+          description: 操作已接受并开始执行。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlSubmission"
+        "400":
+          description: JSON 无效、缺少 confirm:true 或 scan 不是布尔值。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "409":
+          description: 已有一个控制操作在执行。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlSubmission"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          description: 控制请求必须使用 application/json。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          description: 电台尚未就绪或控制调度器不可用。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ControlSubmission"
+                  - $ref: "#/components/schemas/Error"
+  /api/v1/control/side:
+    post:
+      tags: [control]
+      summary: 切换当前 A/B 信道侧
+      description: |
+        先读取完整原始设置块，仅修改当前侧，再写入完整设置块。
+        一次请求只发一次目标写；回读不一致时最多发起一次原值回滚。
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ControlSideRequest"
+      responses:
+        "202":
+          description: 操作已接受并开始执行。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlSubmission"
+        "400":
+          description: JSON 无效、缺少 confirm:true 或 side 不是 A/B。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "409":
+          description: 已有一个控制操作在执行。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ControlSubmission"
+        "413":
+          $ref: "#/components/responses/PayloadTooLarge"
+        "415":
+          description: 控制请求必须使用 application/json。
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "503":
+          description: 电台尚未就绪或控制调度器不可用。
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ControlSubmission"
+                  - $ref: "#/components/schemas/Error"
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: n75_session
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: 10-character-token
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [ok, service, version]
+      properties:
+        ok:
+          type: boolean
+          example: true
+        service:
+          type: string
+          example: N1Direct
+        version:
+          type: string
+          example: 0.6.0
+    Error:
+      type: object
+      additionalProperties: false
+      required: [ok, code, message, requestId]
+      properties:
+        ok:
+          type: boolean
+          example: false
+        code:
+          type: string
+          enum:
+            - AUTH_REQUIRED
+            - AUTH_FAILED
+            - SESSION_EXPIRED
+            - RATE_LIMITED
+            - RADIO_OFFLINE
+            - METHOD_NOT_ALLOWED
+            - NOT_FOUND
+            - PAYLOAD_TOO_LARGE
+            - TOO_MANY_CLIENTS
+            - INTERNAL_ERROR
+            - BAD_REQUEST
+            - BAD_JSON
+            - CONFIRMATION_REQUIRED
+            - UNSUPPORTED_MEDIA_TYPE
+            - VOLUME_OUT_OF_RANGE
+            - SCAN_OUT_OF_RANGE
+            - SIDE_OUT_OF_RANGE
+            - RADIO_NOT_READY
+            - CHANNEL_OUT_OF_RANGE
+            - CATALOG_REFRESH_FAILED
+        message:
+          type: string
+        requestId:
+          type: string
+          example: req-7a18c2
+    CatalogChannel:
+      type: object
+      additionalProperties: false
+      required: [id, name, rxMHz, txMHz, status, stale, readAtMs, attemptedAtMs, errorCode]
+      description: |
+        单个固定信道目录项。status=OK 且 rxMHz/txMHz 均为 null 表示已确认的空信道。
+        失败时允许保留上一次成功值，此时 stale=true 且 errorCode 明确说明失败原因。
+      properties:
+        id:
+          type: integer
+          minimum: 0
+          maximum: 31
+        name:
+          type: string
+          nullable: true
+        rxMHz:
+          type: number
+          format: double
+          nullable: true
+        txMHz:
+          type: number
+          format: double
+          nullable: true
+        status:
+          type: string
+          enum: [PENDING, OK, TIMEOUT, ERROR]
+          description: PENDING=尚未尝试，OK=本轮读取成功，TIMEOUT=本轮超时，ERROR=本轮读取错误。
+        stale:
+          type: boolean
+          description: true 表示当前展示的名称或频率来自更早的成功读取。
+        readAtMs:
+          type: integer
+          format: int64
+          nullable: true
+          description: 最近一次成功读取的 Unix 毫秒时间；从未成功时为 null。
+        attemptedAtMs:
+          type: integer
+          format: int64
+          nullable: true
+          description: 本轮最近一次尝试的 Unix 毫秒时间；尚未尝试时为 null。
+        errorCode:
+          type: string
+          nullable: true
+    ChannelCatalog:
+      type: object
+      additionalProperties: false
+      required: [state, epoch, generation, total, completedCount, successCount, stale, lastRefreshAtMs, lastErrorCode, observedAtMs, channels]
+      description: |
+        state 语义：EMPTY=尚未开始；REFRESHING=刷新中；COMPLETE=32 项均成功；
+        PARTIAL=本轮结束但至少一项失败；OFFLINE=链路不可用。
+        PARTIAL 会保留 lastErrorCode，只有 COMPLETE 才清空该错误。
+      properties:
+        state:
+          type: string
+          enum: [EMPTY, REFRESHING, COMPLETE, PARTIAL, OFFLINE]
+        epoch:
+          type: integer
+          format: int64
+          minimum: 1
+          description: 目录所属蓝牙链路 epoch；链路变化会清空本轮目录状态。
+        generation:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          enum: [32]
+        completedCount:
+          type: integer
+          minimum: 0
+          maximum: 32
+        successCount:
+          type: integer
+          minimum: 0
+          maximum: 32
+        stale:
+          type: boolean
+          description: 任一项保留旧值时为 true。
+        lastRefreshAtMs:
+          type: integer
+          format: int64
+          nullable: true
+        lastErrorCode:
+          type: string
+          nullable: true
+        observedAtMs:
+          type: integer
+          format: int64
+          description: 本响应的 Unix 毫秒时间。
+        channels:
+          type: array
+          minItems: 32
+          maxItems: 32
+          items:
+            $ref: "#/components/schemas/CatalogChannel"
+    ChannelRefreshSubmission:
+      type: object
+      additionalProperties: false
+      required: [ok, accepted, state, refreshEpoch]
+      properties:
+        ok:
+          type: boolean
+          example: true
+        accepted:
+          type: boolean
+          example: true
+        state:
+          type: string
+          enum: [REFRESHING]
+        refreshEpoch:
+          type: integer
+          format: int64
+          minimum: 1
+    ControlVolumeRequest:
+      type: object
+      additionalProperties: false
+      required: [volume, confirm]
+      properties:
+        volume:
+          type: integer
+          minimum: 0
+          maximum: 15
+          example: 4
+        confirm:
+          type: boolean
+          enum: [true]
+          description: 必须显式确认此次写入。
+    ControlScanRequest:
+      type: object
+      additionalProperties: false
+      required: [scan, confirm]
+      properties:
+        scan:
+          type: boolean
+          example: true
+        confirm:
+          type: boolean
+          enum: [true]
+          description: 必须显式确认此次写入。
+    ControlSideRequest:
+      type: object
+      additionalProperties: false
+      required: [side, confirm]
+      properties:
+        side:
+          type: string
+          enum: [A, B]
+          example: B
+        confirm:
+          type: boolean
+          enum: [true]
+          description: 必须显式确认此次写入。
+    ControlSubmission:
+      type: object
+      additionalProperties: false
+      required: [ok, accepted, code, operationId, state, action]
+      properties:
+        ok:
+          type: boolean
+          example: true
+        accepted:
+          type: boolean
+          example: true
+        code:
+          type: string
+          enum:
+            - CONTROL_ACCEPTED
+            - CONTROL_BUSY
+            - RADIO_NOT_READY
+            - CONTROL_TIMER_UNAVAILABLE
+            - CONTROL_CALLBACK_UNAVAILABLE
+        operationId:
+          type: string
+          nullable: true
+          example: ctl-1
+        state:
+          type: string
+          enum:
+            - ACCEPTED
+            - BASELINE_READ
+            - WRITING
+            - READBACK
+            - READBACK_OK
+            - READBACK_MISMATCH
+            - ROLLBACK_WRITING
+            - ROLLBACK_OK
+            - ROLLBACK_FAILED
+            - TIMEOUT
+            - BUSY
+            - UNAVAILABLE
+            - LINK_LOST
+            - CANCELLED
+        action:
+          type: string
+          enum: [volume, scan, side]
+    ControlStatus:
+      type: object
+      additionalProperties: false
+      required: [ok, available, busy, state, kind, operationId, target, baselineDisplay, expectedDisplay, observedDisplay, reason, updatedAt, epoch, sent, rollbackSent]
+      properties:
+        ok:
+          type: boolean
+          example: true
+        available:
+          type: boolean
+          description: 电台控制会话当前是否可用。
+        busy:
+          type: boolean
+          description: 是否有一个尚未结束的控制操作。
+        state:
+          type: string
+          enum:
+            - IDLE
+            - ACCEPTED
+            - BASELINE_READ
+            - WRITING
+            - READBACK
+            - READBACK_OK
+            - READBACK_MISMATCH
+            - ROLLBACK_WRITING
+            - ROLLBACK_OK
+            - ROLLBACK_FAILED
+            - TIMEOUT
+            - BUSY
+            - UNAVAILABLE
+            - LINK_LOST
+            - CANCELLED
+        kind:
+          type: string
+          nullable: true
+          enum: [VOLUME, SCAN, SIDE]
+        operationId:
+          type: string
+          nullable: true
+          example: ctl-1
+        target:
+          type: string
+          nullable: true
+          description: 目标值的简短文本，例如 4、ON、OFF、A 或 B。
+        baselineDisplay:
+          type: string
+          nullable: true
+          description: 写入前读取的原始值。
+        expectedDisplay:
+          type: string
+          nullable: true
+          description: 写入后应回读到的目标值。
+        observedDisplay:
+          type: string
+          nullable: true
+          description: 最近一次实际回读值。
+        reason:
+          type: string
+          nullable: true
+          description: 稳定的内部原因码，不包含令牌或原始链路数据。
+        updatedAt:
+          type: string
+          format: date-time
+        epoch:
+          type: integer
+          format: int64
+          minimum: 0
+          description: 蓝牙链路实例编号；断链变化后旧操作不得继续写入。
+        sent:
+          type: boolean
+          description: 目标写命令是否已经发出。
+        rollbackSent:
+          type: boolean
+          description: 自动恢复写命令是否已经发出。
+    Gateway:
+      type: object
+      additionalProperties: false
+      required: [state, version, startedAt, lastErrorCode]
+      properties:
+        state:
+          type: string
+          enum: [STOPPED, STARTING, CONNECTING_BLUETOOTH, ONLINE, DEGRADED, RECONNECTING, FAULT]
+        version:
+          type: string
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastErrorCode:
+          type: string
+          nullable: true
+    Connection:
+      type: object
+      additionalProperties: false
+      required: [state, deviceLabel, connectedAt, lastError]
+      properties:
+        state:
+          type: string
+          enum: [DISCONNECTED, CONNECTING, CONNECTED, RECONNECTING, FAULT]
+        deviceLabel:
+          type: string
+          nullable: true
+          description: 仅设备名称或短标签，不返回蓝牙 MAC。
+        connectedAt:
+          type: string
+          format: date-time
+          nullable: true
+        lastError:
+          type: string
+          nullable: true
+    Capabilities:
+      type: object
+      additionalProperties: false
+      required: [fmReceive, dmr, vfo]
+      properties:
+        fmReceive:
+          type: boolean
+        dmr:
+          type: boolean
+        vfo:
+          type: boolean
+    Settings:
+      type: object
+      additionalProperties: false
+      required: [channelA, channelB, currentSide, scan, squelch, dualMode]
+      properties:
+        channelA:
+          type: integer
+          nullable: true
+          minimum: 0
+        channelB:
+          type: integer
+          nullable: true
+          minimum: 0
+        currentSide:
+          type: string
+          nullable: true
+          enum: [A, B, null]
+        scan:
+          type: boolean
+          nullable: true
+        squelch:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 15
+        dualMode:
+          type: string
+          nullable: true
+          enum: [A, B, null]
+    RadioStatus:
+      type: object
+      additionalProperties: false
+      required: [power, transmitting, squelchOpen, receiving, scanning, fmBroadcast, currentChannel, currentZone, rssiLevel]
+      properties:
+        power:
+          type: boolean
+          nullable: true
+        transmitting:
+          type: boolean
+          nullable: true
+        squelchOpen:
+          type: boolean
+          nullable: true
+        receiving:
+          type: boolean
+          nullable: true
+        scanning:
+          type: boolean
+          nullable: true
+        fmBroadcast:
+          type: boolean
+          nullable: true
+        currentChannel:
+          type: integer
+          nullable: true
+          minimum: 0
+        currentZone:
+          type: integer
+          nullable: true
+          minimum: 0
+        rssiLevel:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 15
+    Radio:
+      type: object
+      additionalProperties: false
+      required: [productId, softwareVersion, channelCount, zoneCount, bandCount, capabilities, settings, status]
+      properties:
+        productId:
+          type: string
+          nullable: true
+        softwareVersion:
+          type: string
+          nullable: true
+        channelCount:
+          type: integer
+          nullable: true
+        zoneCount:
+          type: integer
+          nullable: true
+        bandCount:
+          type: integer
+          nullable: true
+        capabilities:
+          $ref: "#/components/schemas/Capabilities"
+        settings:
+          $ref: "#/components/schemas/Settings"
+        status:
+          $ref: "#/components/schemas/RadioStatus"
+    Channel:
+      type: object
+      additionalProperties: false
+      required: [id, name, rxMHz, txMHz]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          nullable: true
+        rxMHz:
+          type: number
+          format: double
+          nullable: true
+        txMHz:
+          type: number
+          format: double
+          nullable: true
+    Snapshot:
+      type: object
+      additionalProperties: false
+      required: [schemaVersion, ok, instanceId, revision, generatedAt, updatedAt, staleAfterMs, stale, source, gateway, connection, radio, volume, channel]
+      properties:
+        schemaVersion:
+          type: integer
+          enum: [1]
+        ok:
+          type: boolean
+          example: true
+        instanceId:
+          type: string
+          description: 服务每次启动生成的新实例标识。
+        revision:
+          type: integer
+          format: int64
+          minimum: 0
+        generatedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+          nullable: true
+        staleAfterMs:
+          type: integer
+          example: 15000
+        stale:
+          type: boolean
+        source:
+          type: string
+          enum: [none, initial, poll, notification]
+        gateway:
+          $ref: "#/components/schemas/Gateway"
+        connection:
+          $ref: "#/components/schemas/Connection"
+        radio:
+          $ref: "#/components/schemas/Radio"
+        volume:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 15
+        channel:
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/Channel"
+  responses:
+    AuthRequired:
+      description: 需要有效访问令牌或会话。
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+            example: Bearer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    AuthFailed:
+      description: 访问令牌或会话无效；不区分具体失败原因。
+      headers:
+        WWW-Authenticate:
+          schema:
+            type: string
+            example: Bearer
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    RateLimited:
+      description: 连续鉴权失败或客户端数量超过限制。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    PayloadTooLarge:
+      description: 请求体超过 1024 字节。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    InternalError:
+      description: 服务内部错误；不返回栈或敏感信息。
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

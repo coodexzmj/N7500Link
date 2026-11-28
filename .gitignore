@@ -12,10 +12,15 @@ keystore/
 *.p12
 *.pfx
 
-# Local measurement logs
+# Local measurement logs and scratch work
 N1Probe-logs/
 实测日志/
 *.log
+/work/
+/_tools/
+/第五阶段-N1Direct/work/
+/第五阶段-N1Direct/dist/
+/$null
 
 # Generated signature sidecar
 *.idsig
