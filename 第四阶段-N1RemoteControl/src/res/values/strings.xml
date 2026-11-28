@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">N1RemoteControl N7500 低风险远程控制</string>
+    <string name="notification_channel">N1RemoteControl 常驻服务</string>
+    <string name="notification_title">N1RemoteControl 远程控制运行中</string>
+    <string name="notification_text">点按打开远程控制页</string>
+</resources>

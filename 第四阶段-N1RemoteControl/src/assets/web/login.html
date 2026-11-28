@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <title>登录 · N1RemoteControl</title>
+  <link rel="stylesheet" href="/assets/style.css">
+</head>
+<body class="login-page">
+  <header class="wx-topbar login-topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">N</span>
+      <span class="brand-title">N7500 远程控制</span>
+      <span class="risk-badge">低风险控制</span>
+    </div>
+  </header>
+  <main class="login-shell">
+    <div class="login-logo" aria-hidden="true">N</div>
+    <h1>访问 N7500</h1>
+    <p class="subtitle">输入 N1RemoteControl 在 N1 应用内生成的访问令牌。令牌不会写入网址、浏览器历史或服务器日志。</p>
+    <form method="post" action="/api/v1/session" autocomplete="off">
+      <label for="token">访问令牌</label>
+      <input id="token" name="token" type="password" minlength="10" maxlength="256" required autofocus spellcheck="false" autocapitalize="characters" autocomplete="off" placeholder="输入10位访问令牌">
+      <button type="submit">登录</button>
+    </form>
+    <p class="hint">首次运行时，在 N1 应用内点按“复制访问令牌”。会话最长保留 12 小时。登录后可远程调整音量、扫描和信道 A/B。</p>
+  </main>
+</body>
+</html>
