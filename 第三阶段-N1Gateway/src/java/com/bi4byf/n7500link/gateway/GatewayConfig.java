@@ -43,11 +43,21 @@ final class GatewayConfig {
     }
 
     /**
-     * N1 的 Android TV 固件在整机休眠时会断开 Wi-Fi。无人值守网关首次升级到
-     * 0.3.4 时迁移为屏幕常亮；迁移只执行一次，用户之后仍可在界面中关闭。
+     * N1 的 Android TV 固件在整机休眠时会断开 Wi-Fi。旧版本首次升级时迁移为
+     * 屏幕常亮；0.3.5 再用独立迁移键纠正初始化监听器曾误写的 false 值。
+     * 每项迁移只执行一次，用户之后仍可在界面中关闭。
      */
     static boolean screenAlwaysOn(SharedPreferences preferences) {
         if (!preferences.getBoolean(
+                GatewayContract.PREF_SCREEN_INITIALIZATION_FIX_MIGRATED, false)) {
+            preferences.edit()
+                    .putBoolean(GatewayContract.PREF_SCREEN_ALWAYS_ON,
+                            GatewayContract.DEFAULT_SCREEN_ALWAYS_ON)
+                    .putBoolean(GatewayContract.PREF_SCREEN_DEFAULT_MIGRATED, true)
+                    .putBoolean(
+                            GatewayContract.PREF_SCREEN_INITIALIZATION_FIX_MIGRATED, true)
+                    .apply();
+        } else if (!preferences.getBoolean(
                 GatewayContract.PREF_SCREEN_DEFAULT_MIGRATED, false)) {
             preferences.edit()
                     .putBoolean(GatewayContract.PREF_SCREEN_ALWAYS_ON,
@@ -78,6 +88,8 @@ final class GatewayConfig {
         editor.putBoolean(GatewayContract.PREF_BOOT_ENABLED, bootEnabled);
         editor.putBoolean(GatewayContract.PREF_SCREEN_ALWAYS_ON, screenAlwaysOn);
         editor.putBoolean(GatewayContract.PREF_SCREEN_DEFAULT_MIGRATED, true);
+        editor.putBoolean(
+                GatewayContract.PREF_SCREEN_INITIALIZATION_FIX_MIGRATED, true);
         editor.apply();
     }
 

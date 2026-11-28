@@ -21,7 +21,9 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
@@ -59,14 +61,15 @@ public final class MainActivity extends Activity {
     private TextView tokenView;
     private TextView headerStatusView;
     private TextView headerDotView;
+    private PositionStableScrollView mainScroll;
     private Button startButton;
     private Button stopButton;
     private Button rotateButton;
     private Button copyTokenButton;
     private Button openPageButton;
-
     private GatewayService gateway;
     private boolean bound;
+    private boolean runtimeOptionsReady;
     private String displayedToken;
 
     private final Runnable statusPoll = new Runnable() {
@@ -100,6 +103,7 @@ public final class MainActivity extends Activity {
         adapter = BluetoothAdapter.getDefaultAdapter();
         buildUi();
         loadSavedSelection();
+        bindRuntimeOptionListeners();
         refreshDevices();
         GatewayBootScheduler.schedule(this);
     }
@@ -153,6 +157,18 @@ public final class MainActivity extends Activity {
         if (requestCode == REQUEST_ENABLE_BT) refreshDevices();
     }
 
+    /** N1 boxes usually have a pointer or remote, not a touchscreen. */
+    @Override public boolean dispatchGenericMotionEvent(MotionEvent event) {
+        if (event.getAction() == MotionEvent.ACTION_SCROLL && mainScroll != null) {
+            float delta = event.getAxisValue(MotionEvent.AXIS_VSCROLL);
+            if (delta != 0f) {
+                mainScroll.scrollBy(0, delta < 0f ? dp(120) : -dp(120));
+                return true;
+            }
+        }
+        return super.dispatchGenericMotionEvent(event);
+    }
+
     private void buildUi() {
         LinearLayout window = new LinearLayout(this);
         window.setOrientation(LinearLayout.VERTICAL);
@@ -204,6 +220,17 @@ public final class MainActivity extends Activity {
         statusRow.addView(headerStatusView);
         titleColumn.addView(statusRow);
 
+        LinearLayout scrollTools = new LinearLayout(this);
+        scrollTools.setOrientation(LinearLayout.HORIZONTAL);
+        scrollTools.setGravity(Gravity.CENTER_VERTICAL);
+        Button scrollUp = makeToolbarButton("上翻");
+        Button scrollDown = makeToolbarButton("下翻");
+        Button scrollBottom = makeToolbarButton("到底");
+        scrollTools.addView(scrollUp);
+        scrollTools.addView(scrollDown);
+        scrollTools.addView(scrollBottom);
+        header.addView(scrollTools);
+
         TextView readonly = new TextView(this);
         readonly.setText("只读");
         readonly.setTextSize(11);
@@ -215,15 +242,24 @@ public final class MainActivity extends Activity {
         window.addView(header, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true);
-        scroll.setBackgroundColor(Color.rgb(237, 237, 237));
+        mainScroll = new PositionStableScrollView(this);
+        mainScroll.setFillViewport(true);
+        mainScroll.setBackgroundColor(Color.rgb(237, 237, 237));
+        mainScroll.setVerticalScrollBarEnabled(true);
+        mainScroll.setScrollbarFadingEnabled(false);
+        scrollUp.setOnClickListener(v -> {
+            mainScroll.scrollBy(0, -dp(620));
+        });
+        scrollDown.setOnClickListener(v -> {
+            mainScroll.scrollBy(0, dp(620));
+        });
+        scrollBottom.setOnClickListener(v -> mainScroll.scrollToBottom());
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(18), dp(16), dp(18), dp(28));
-        scroll.addView(root, new ScrollView.LayoutParams(
+        root.setPadding(dp(18), dp(16), dp(18), dp(72));
+        mainScroll.addView(root, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        window.addView(scroll, new LinearLayout.LayoutParams(
+        window.addView(mainScroll, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         setContentView(window);
 
@@ -234,6 +270,7 @@ public final class MainActivity extends Activity {
         statusCard.addView(addressView, matchWrap());
         statusView = valueText("网关未启动。", 13, Color.rgb(53, 53, 53));
         statusView.setLineSpacing(dp(3), 1.0f);
+        statusView.setMinHeight(dp(190));
         statusView.setTextIsSelectable(true);
         statusView.setPadding(0, dp(6), 0, 0);
         statusCard.addView(statusView, matchWrap());
@@ -280,7 +317,6 @@ public final class MainActivity extends Activity {
         bootSwitch = new Switch(this);
         bootSwitch.setText("开机后自动启动网关");
         bootSwitch.setTextColor(Color.rgb(35, 35, 35));
-        bootSwitch.setOnCheckedChangeListener((button, checked) -> persistRuntimeOptions());
         optionsCard.addView(bootSwitch, matchWrap());
 
         foregroundSwitch = new Switch(this);
@@ -293,11 +329,6 @@ public final class MainActivity extends Activity {
         screenSwitch = new Switch(this);
         screenSwitch.setText("保持屏幕常亮（N1 长时间运行建议开启）");
         screenSwitch.setTextColor(Color.rgb(35, 35, 35));
-                screenSwitch.setOnCheckedChangeListener((button, checked) -> {
-            persistRuntimeOptions();
-            if (!checked) toast("N1 熄屏后可能断开 Wi-Fi；无人值守时建议保持开启");
-            if (gateway != null && gateway.isGatewayRunning()) gateway.applyRuntimeOptions();
-        });
         optionsCard.addView(screenSwitch, matchWrap());
         root.addView(optionsCard, cardParams());
 
@@ -347,7 +378,7 @@ public final class MainActivity extends Activity {
         tokenCard.addView(tokenView, matchWrap());
         root.addView(tokenCard, cardParams());
 
-        TextView footer = valueText("作者 BI4BYF · 安全版本 0.3.4 G1 只读\n"
+        TextView footer = valueText("作者 BI4BYF · 安全版本 0.3.7 G1 只读\n"
                 + "不提供音量、扫描、信道、发射、音频或固件操作。", 11,
                 Color.rgb(128, 128, 128));
         footer.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -365,8 +396,26 @@ public final class MainActivity extends Activity {
         screenSwitch.setChecked(GatewayConfig.screenAlwaysOn(preferences));
     }
 
+    /**
+     * Listener must be bound only after setChecked() has restored the persisted values.
+     * Binding earlier caused initialization to write the opposite switch state.
+     */
+    private void bindRuntimeOptionListeners() {
+        bootSwitch.setOnCheckedChangeListener((button, checked) -> {
+            if (runtimeOptionsReady) persistRuntimeOptions();
+        });
+        screenSwitch.setOnCheckedChangeListener((button, checked) -> {
+            if (!runtimeOptionsReady) return;
+            persistRuntimeOptions();
+            if (!checked) toast("N1 熄屏后可能断开 Wi-Fi；无人值守时建议保持开启");
+            if (gateway != null && gateway.isGatewayRunning()) gateway.applyRuntimeOptions();
+        });
+        runtimeOptionsReady = true;
+    }
+
     private void persistRuntimeOptions() {
-        if (preferences == null || bootSwitch == null || screenSwitch == null) return;
+        if (!runtimeOptionsReady || preferences == null
+                || bootSwitch == null || screenSwitch == null) return;
         preferences.edit()
                 .putBoolean(GatewayContract.PREF_BOOT_ENABLED, bootSwitch.isChecked())
                 .putBoolean(GatewayContract.PREF_SCREEN_ALWAYS_ON, screenSwitch.isChecked())
@@ -487,20 +536,25 @@ public final class MainActivity extends Activity {
     }
 
     private void renderStatus() {
+        if (mainScroll != null) mainScroll.preservePosition(mainScroll.getScrollY());
+        renderStatusContent();
+    }
+
+    private void renderStatusContent() {
         if (gateway == null) {
-            addressView.setText("监听地址：服务尚未绑定");
-            statusView.setText("网关未启动。点击“启动网关”后会创建前台服务和本地网页。");
+            setTextIfChanged(addressView, "监听地址：服务尚未绑定");
+            setTextIfChanged(statusView, "网关未启动。点击“启动网关”后会创建前台服务和本地网页。");
             setHeaderStatus("网关未启动", Color.rgb(158, 158, 158));
             setRunningButtons(false);
             return;
         }
         boolean running = gateway.isGatewayRunning();
         setRunningButtons(running);
-        addressView.setText(running
+        setTextIfChanged(addressView, running
                 ? "监听地址：" + gateway.gatewayBindAddress() + ":" + gateway.gatewayPort()
                 : "监听地址：尚未启动");
         if (!running) {
-            statusView.setText("网关未启动。");
+            setTextIfChanged(statusView, "网关未启动。");
             setHeaderStatus("网关未启动", Color.rgb(158, 158, 158));
             return;
         }
@@ -556,7 +610,7 @@ public final class MainActivity extends Activity {
                 diagnostics = "统计不可用";
                 runtimeLocks = "状态不可用";
             }
-            statusView.setText("网关：" + gatewayState
+            setTextIfChanged(statusView, "网关：" + gatewayState
                     + "\n连接：" + connectionState + "　设备：" + device
                     + "\n产品：" + product + "　软件：" + software
                     + "\n信道：" + channelName
@@ -568,7 +622,7 @@ public final class MainActivity extends Activity {
                     + "\n链路：" + diagnostics
                     + errorText);
         } catch (Exception e) {
-            statusView.setText("快照解析失败，请查看系统日志等待重连。");
+            setTextIfChanged(statusView, "快照解析失败，请查看系统日志等待重连。");
             setHeaderStatus("状态读取失败", Color.rgb(229, 57, 53));
         }
     }
@@ -583,12 +637,17 @@ public final class MainActivity extends Activity {
     private void showToken(String token) {
         displayedToken = token;
         if (token == null || token.isEmpty()) {
-            tokenView.setText("当前页面没有保留令牌。令牌原文不会写入配置或日志；"
+            setTextIfChanged(tokenView, "当前页面没有保留令牌。令牌原文不会写入配置或日志；"
                     + "如需重新获取，请点击“旋转访问令牌”。");
         } else {
-            tokenView.setText("访问令牌（请立即保存）：\n" + token
+            setTextIfChanged(tokenView, "10位访问令牌（请立即保存）：\n" + token
                     + "\n\n关闭应用后原文不会再显示；服务会继续只保存哈希。");
         }
+    }
+
+    private static void setTextIfChanged(TextView view, String text) {
+        if (view == null || text == null) return;
+        if (!text.contentEquals(view.getText())) view.setText(text);
     }
 
     private void requestRequiredPermissions() {
@@ -717,6 +776,20 @@ public final class MainActivity extends Activity {
         return button;
     }
 
+    private Button makeToolbarButton(String text) {
+        Button button = makeButton(text);
+        button.setTextSize(12);
+        button.setTextColor(Color.WHITE);
+        button.setBackground(rounded(0x33FFFFFF, 5, 0x66FFFFFF));
+        button.setMinWidth(dp(54));
+        button.setMinHeight(dp(34));
+        button.setPadding(dp(8), 0, dp(8), 0);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(54), dp(34));
+        params.leftMargin = dp(4);
+        button.setLayoutParams(params);
+        return button;
+    }
+
     private TextView valueText(String text, int sizeSp, int color) {
         TextView view = new TextView(this);
         view.setText(text);
@@ -756,6 +829,52 @@ public final class MainActivity extends Activity {
         }
         @Override public String toString() {
             return address == null ? label : label + "　[" + maskAddress(address) + "]";
+        }
+    }
+
+    /**
+     * The status panel refreshes once per second. A normal ScrollView may let a
+     * later layout or focus request pull the viewport back to the first field.
+     * Keep the exact viewport during the short layout window after each refresh.
+     */
+    private static final class PositionStableScrollView extends ScrollView {
+        private static final long LAYOUT_PRESERVE_MS = 800L;
+        private int preservedY;
+        private long preserveUntil;
+
+        PositionStableScrollView(Context context) {
+            super(context);
+        }
+
+        void preservePosition(int scrollY) {
+            preservedY = scrollY;
+            preserveUntil = SystemClock.uptimeMillis() + LAYOUT_PRESERVE_MS;
+        }
+
+        void scrollToBottom() {
+            preservedY = Integer.MAX_VALUE;
+            preserveUntil = SystemClock.uptimeMillis() + LAYOUT_PRESERVE_MS;
+            scrollTo(0, maxScrollY());
+        }
+
+        @Override protected void onLayout(boolean changed, int left, int top,
+                                           int right, int bottom) {
+            int beforeLayout = getScrollY();
+            super.onLayout(changed, left, top, right, bottom);
+            int target = SystemClock.uptimeMillis() <= preserveUntil
+                    ? preservedY : beforeLayout;
+            scrollTo(0, clampToContent(target));
+        }
+
+        private int maxScrollY() {
+            View child = getChildAt(0);
+            if (child == null) return 0;
+            return Math.max(0, child.getHeight() - getHeight());
+        }
+
+        private int clampToContent(int scrollY) {
+            if (scrollY == Integer.MAX_VALUE) return maxScrollY();
+            return Math.max(0, Math.min(scrollY, maxScrollY()));
         }
     }
 }

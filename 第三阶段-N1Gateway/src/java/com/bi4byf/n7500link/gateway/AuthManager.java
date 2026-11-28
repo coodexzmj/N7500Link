@@ -33,6 +33,8 @@ public final class AuthManager {
 
     private static final int MAX_FAILURES = 5;
     private static final long FAILURE_WINDOW_MS = 60000L;
+    private static final char[] TOKEN_ALPHABET =
+            "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
 
     private final TokenStore store;
     private final Clock clock;
@@ -72,7 +74,7 @@ public final class AuthManager {
 
     /** Rotates the access token, invalidates all sessions, and returns plaintext once. */
     public String rotateToken() {
-        String raw = "n75_" + base64Url(randomBytes(32));
+        String raw = compactToken();
         String hash = sha256Hex(raw);
         synchronized (this) {
             tokenHash = hash;
@@ -82,6 +84,15 @@ public final class AuthManager {
             store.save(hash, tokenCreatedAt);
         }
         return raw;
+    }
+
+    /** Ten unambiguous characters keep manual entry practical while retaining 50 bits. */
+    private String compactToken() {
+        StringBuilder value = new StringBuilder(GatewayContract.ACCESS_TOKEN_LENGTH);
+        for (int i = 0; i < GatewayContract.ACCESS_TOKEN_LENGTH; i++) {
+            value.append(TOKEN_ALPHABET[random.nextInt(TOKEN_ALPHABET.length)]);
+        }
+        return value.toString();
     }
 
     public LoginResult login(String rawToken, String sourceTag) {

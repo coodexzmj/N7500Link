@@ -1,5 +1,5 @@
 param(
-    [string]$OutputName = "N1Gateway-N7500-v0.3.4-debug.apk",
+    [string]$OutputName = "N1Gateway-N7500-v0.3.7-debug.apk",
     [string]$ToolchainRoot = "C:\adb-n1\toolchain"
 )
 

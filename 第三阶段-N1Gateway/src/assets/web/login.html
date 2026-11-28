@@ -21,7 +21,7 @@
     <p class="subtitle">输入 N1Gateway 在 N1 应用内生成的访问令牌。令牌不会写入网址、浏览器历史或服务器日志。</p>
     <form method="post" action="/api/v1/session" autocomplete="off">
       <label for="token">访问令牌</label>
-      <input id="token" name="token" type="password" minlength="20" maxlength="256" required autofocus spellcheck="false" autocapitalize="none" placeholder="n75_...">
+      <input id="token" name="token" type="password" minlength="10" maxlength="256" required autofocus spellcheck="false" autocapitalize="characters" autocomplete="off" placeholder="输入10位访问令牌">
       <button type="submit">登录</button>
     </form>
     <p class="hint">首次运行时，在 N1 应用内点按“复制访问令牌”。会话最长保留 12 小时。</p>

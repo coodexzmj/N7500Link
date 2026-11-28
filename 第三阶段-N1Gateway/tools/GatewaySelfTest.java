@@ -54,7 +54,10 @@ public final class GatewaySelfTest {
         MemoryTokenStore store = new MemoryTokenStore();
         AuthManager auth = new AuthManager(store, () -> 1000L);
         String token = auth.initializeToken();
-        check(token != null && token.length() >= 20, "token initialized");
+        check(token != null && token.length() == GatewayContract.ACCESS_TOKEN_LENGTH,
+                "compact token initialized");
+        check(token != null && token.matches("^[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]+$"),
+                "compact token uses unambiguous characters");
         check(store.hash != null && !store.hash.contains(token), "token stored only as hash");
         AuthManager.LoginResult login = auth.login(token, "test-client");
         check(login.ok && login.sessionCookie != null, "correct token creates session");

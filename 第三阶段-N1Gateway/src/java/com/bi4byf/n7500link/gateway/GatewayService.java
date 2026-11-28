@@ -106,7 +106,16 @@ public final class GatewayService extends Service {
             if (auth == null) {
                 auth = new AuthManager(new PreferenceTokenStore(preferences),
                         System::currentTimeMillis);
+                boolean hadToken = auth.hasToken();
                 pendingToken = auth.initializeToken();
+                if (!preferences.getBoolean(
+                        GatewayContract.PREF_TOKEN_COMPACT_MIGRATED, false)) {
+                    // Existing releases used a long token. Rotate exactly once so the
+                    // compact-token upgrade also invalidates every old browser session.
+                    if (hadToken) pendingToken = auth.rotateToken();
+                    preferences.edit().putBoolean(
+                            GatewayContract.PREF_TOKEN_COMPACT_MIGRATED, true).apply();
+                }
             }
             InetAddress address = GatewayConfig.resolveBindAddress(config.bindMode, preferences);
             bindAddress = address.getHostAddress();

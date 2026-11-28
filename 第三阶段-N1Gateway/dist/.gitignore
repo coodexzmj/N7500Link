@@ -1,3 +1,3 @@
 # Only the current debug APK is published; older local builds stay untracked.
 *.apk
-!N1Gateway-N7500-v0.3.4-debug.apk
+!N1Gateway-N7500-v0.3.7-debug.apk

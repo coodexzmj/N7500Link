@@ -222,7 +222,7 @@ components:
           example: n7500link-gateway
         version:
           type: string
-          example: 0.3.4
+          example: 0.3.7
     Error:
       type: object
       additionalProperties: false

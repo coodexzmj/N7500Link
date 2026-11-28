@@ -237,7 +237,9 @@ public final class LocalWebServer {
         }
         Map<String, String> form = parseForm(request.body);
         String token = form.get("token");
-        if (token == null || token.length() < 20 || token.length() > 256) {
+        if (token == null
+                || token.length() < GatewayContract.ACCESS_TOKEN_MIN_LENGTH
+                || token.length() > GatewayContract.ACCESS_TOKEN_MAX_LENGTH) {
             writeError(output, 401, "AUTH_FAILED", "访问令牌不正确");
             audit("auth", "WARN", "AUTH_FAILED", sourceTag, repository.instanceId(), null);
             return;

@@ -11,7 +11,7 @@ public final class GatewayContract {
 
     public static final String APP_NAME = "N1Gateway";
     public static final String PACKAGE_NAME = "com.bi4byf.n7500link.gateway";
-    public static final String VERSION = "0.3.4";
+    public static final String VERSION = "0.3.7";
     public static final String ACTION_BRIDGE_WAKE =
             "com.bi4byf.n7500link.gateway.action.BRIDGE_WAKE";
     public static final int SCHEMA_VERSION = 1;
@@ -19,10 +19,15 @@ public final class GatewayContract {
     public static final long STALE_AFTER_MS = 15000L;
     public static final long SESSION_MAX_AGE_MS = 12L * 60L * 60L * 1000L;
     public static final int MAX_SESSIONS = 8;
+    public static final int ACCESS_TOKEN_LENGTH = 10;
+    public static final int ACCESS_TOKEN_MIN_LENGTH = 10;
+    public static final int ACCESS_TOKEN_MAX_LENGTH = 256;
 
     public static final String PREFS = "n7500_gateway";
     public static final String PREF_TOKEN_HASH = "token_hash";
     public static final String PREF_TOKEN_CREATED_AT = "token_created_at";
+    public static final String PREF_TOKEN_COMPACT_MIGRATED =
+            "token_compact_length_v1";
     public static final String PREF_DEVICE_ADDRESS = "device_address";
     public static final String PREF_DEVICE_LABEL = "device_label";
     public static final String PREF_BIND_MODE = "bind_mode";
@@ -32,6 +37,8 @@ public final class GatewayContract {
     public static final String PREF_SCREEN_ALWAYS_ON = "screen_always_on";
     public static final String PREF_SCREEN_DEFAULT_MIGRATED =
             "screen_always_on_default_v2";
+    public static final String PREF_SCREEN_INITIALIZATION_FIX_MIGRATED =
+            "screen_always_on_init_fix_v3";
     public static final boolean DEFAULT_SCREEN_ALWAYS_ON = true;
     public static final String PREF_BOOT_LAST_AT = "boot_last_at";
     public static final String PREF_BOOT_LAST_ACTION = "boot_last_action";

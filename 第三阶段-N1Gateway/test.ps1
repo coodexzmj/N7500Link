@@ -71,7 +71,7 @@ foreach ($required in @('PARTIAL_WAKE_LOCK', 'SCREEN_BRIGHT_WAKE_LOCK', 'WIFI_MO
 }
 $contractSource = [IO.File]::ReadAllText((Join-Path $sourceDir 'GatewayContract.java'))
 $configSource = [IO.File]::ReadAllText((Join-Path $sourceDir 'GatewayConfig.java'))
-foreach ($required in @('PREF_SCREEN_DEFAULT_MIGRATED', 'DEFAULT_SCREEN_ALWAYS_ON = true', 'screenAlwaysOn(preferences)')) {
+foreach ($required in @('PREF_SCREEN_DEFAULT_MIGRATED', 'PREF_SCREEN_INITIALIZATION_FIX_MIGRATED', 'DEFAULT_SCREEN_ALWAYS_ON = true', 'screenAlwaysOn(preferences)')) {
     if ($contractSource.IndexOf($required, [StringComparison]::Ordinal) -lt 0 -and
             $configSource.IndexOf($required, [StringComparison]::Ordinal) -lt 0 -and
             $serviceSource.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
@@ -87,9 +87,23 @@ foreach ($required in @('PREF_SCREEN_ALWAYS_ON', '保持屏幕常亮', '强制�
         throw "运行选项扫描失败：MainActivity 缺少 $required。"
     }
 }
+foreach ($required in @('bindRuntimeOptionListeners', 'runtimeOptionsReady',
+        'Listener must be bound only after setChecked()', 'if (!runtimeOptionsReady) return;')) {
+    if ($activitySource.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
+        throw "运行选项初始化门禁失败：MainActivity 缺少 $required。"
+    }
+}
+$loadAt = $activitySource.IndexOf('loadSavedSelection();', [StringComparison]::Ordinal)
+$bindAt = $activitySource.IndexOf('bindRuntimeOptionListeners();', [StringComparison]::Ordinal)
+if ($loadAt -lt 0 -or $bindAt -le $loadAt) {
+    throw "运行选项初始化门禁失败：监听器必须在恢复开关值之后绑定。"
+}
+if ($contractSource.IndexOf('screen_always_on_init_fix_v3', [StringComparison]::Ordinal) -lt 0) {
+    throw "屏幕常亮升级修复门禁失败：缺少独立迁移键。"
+}
 
-$expectedVersion = "0.3.4"
-$expectedVersionCode = 10
+$expectedVersion = "0.3.7"
+$expectedVersionCode = 13
 $contractVersion = [Regex]::Match($contractSource, 'VERSION\s*=\s*"([^"]+)"').Groups[1].Value
 $manifestVersion = [Regex]::Match($manifest, 'android:versionName="([^"]+)"').Groups[1].Value
 $manifestVersionCodeText = [Regex]::Match($manifest, 'android:versionCode="([0-9]+)"').Groups[1].Value
@@ -100,6 +114,29 @@ if ($contractVersion -ne $expectedVersion -or $manifestVersion -ne $expectedVers
 $buildSource = [IO.File]::ReadAllText((Join-Path $project 'build.ps1'))
 if ($buildSource.IndexOf("v$expectedVersion-debug.apk", [StringComparison]::Ordinal) -lt 0) {
     throw "版本门禁失败：build.ps1 默认输出名未包含 v$expectedVersion。"
+}
+
+foreach ($required in @('ACCESS_TOKEN_LENGTH = 10', 'PREF_TOKEN_COMPACT_MIGRATED',
+        'token_compact_length_v1')) {
+    if ($contractSource.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
+        throw "紧凑令牌门禁失败：GatewayContract 缺少 $required"
+    }
+}
+foreach ($required in @('hadToken', 'auth.rotateToken()', 'PREF_TOKEN_COMPACT_MIGRATED')) {
+    if ($serviceSource.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
+        throw "旧令牌迁移门禁失败：GatewayService 缺少 $required"
+    }
+}
+foreach ($required in @('mainScroll', 'dispatchGenericMotionEvent', '上翻', '下翻', '到底')) {
+    if ($activitySource.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
+        throw "盒子滚动门禁失败：MainActivity 缺少 $required"
+    }
+}
+foreach ($required in @('PositionStableScrollView', 'preservePosition',
+        'LAYOUT_PRESERVE_MS', 'scrollToBottom', 'setTextIfChanged')) {
+    if ($activitySource.IndexOf($required, [StringComparison]::Ordinal) -lt 0) {
+        throw "滚动位置保持门禁失败：MainActivity 缺少 $required"
+    }
 }
 
 $uiChecks = 0
@@ -123,6 +160,7 @@ Assert-UiText $indexSource 'data-panel="gateway"' '网关页签'
 Assert-UiText $indexSource 'data-panel="diagnostics"' '诊断页签'
 Assert-UiText $indexSource 'data-panel="about"' '关于页签'
 Assert-UiText $loginSource 'action="/api/v1/session"' '登录表单'
+Assert-UiText $loginSource 'minlength="10"' '紧凑令牌登录长度'
 Assert-UiText $appSource 'selectPanel(initial, false)' '页签切换'
 Assert-UiText $activitySource 'setHeaderStatus("电台已连接", Color.rgb(7, 193, 96))' '原生绿色在线状态'
 Assert-UiText $activitySource 'setHeaderStatus("快照已过期", Color.rgb(255, 179, 0))' '原生过期状态'
